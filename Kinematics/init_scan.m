@@ -4,7 +4,7 @@
 sb = 175;   % base triangle side, mm
 sp = 150;   % platform triangle side, mm
 L1 = 180;   % proximal (bicep), mm
-L2 = 600;   % distal (forearm), mm   <-- 600 vs 700 still unresolved
+L2 = 600;   % distal (forearm), mm   -- confirmed by physical measurement
 
 % --- scan volume ---
 xr = [-100 100];
