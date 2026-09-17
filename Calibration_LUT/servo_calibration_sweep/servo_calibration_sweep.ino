@@ -16,6 +16,11 @@
 //   F              forward sweep: PW_MIN -> PW_MAX, NUM_POINTS steps
 //   B              backward sweep: PW_MAX -> PW_MIN, NUM_POINTS steps
 //   H              move selected servo to its center pulse width
+//   P<us>          hold-out check point, e.g. P1650: move to that pulse width,
+//                  prompt N_REPEATS times, log inside "# BEGIN HOLDOUT" /
+//                  "# END HOLDOUT" markers. Use pulse widths NOT on the sweep
+//                  grid; parse_sweep_log.m routes these to cal_servo<N>_holdout.csv
+//                  for compare_calibrations.m (HANDOFF step 12).
 //   Q              detach the selected servo (park it, no more holding torque)
 //   ?              print this help
 //
@@ -36,7 +41,7 @@ Servo servo;
 int8_t activeServo = -1; // 0,1,2 -> SERVO_PINS index; -1 = none attached
 
 void printHelp() {
-  Serial.println(F("# S1/S2/S3 select servo, F forward sweep, B backward sweep, H home, Q detach, ? help"));
+  Serial.println(F("# S1/S2/S3 select servo, F forward sweep, B backward sweep, P<us> hold-out point, H home, Q detach, ? help"));
 }
 
 void selectServo(uint8_t idx) {
@@ -118,6 +123,21 @@ void loop() {
     } else {
       servo.writeMicroseconds((PW_MIN + PW_MAX) / 2);
       Serial.println(F("# Homed to center pulse width"));
+    }
+  }
+  else if (cmd.startsWith("P") && cmd.length() > 1) {
+    int pw = cmd.substring(1).toInt();
+    if (activeServo < 0) {
+      Serial.println(F("# No servo selected - send S1/S2/S3 first"));
+    } else if (pw < PW_MIN || pw > PW_MAX) {
+      Serial.print(F("# Pulse width out of range ("));
+      Serial.print(PW_MIN); Serial.print('-'); Serial.print(PW_MAX);
+      Serial.println(F(" us)"));
+    } else {
+      Serial.print(F("# BEGIN HOLDOUT servo="));
+      Serial.println(activeServo + 1);
+      runPoint(pw);
+      Serial.println(F("# END HOLDOUT"));
     }
   }
   else if (cmd == "Q") {

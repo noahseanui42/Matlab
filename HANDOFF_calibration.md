@@ -50,20 +50,21 @@ Why this order and not lookup-table-first:
 3. **Select the servo**: send `S1` (repeat for `S2`, `S3` as each is swapped into the rig).
 4. **Sweep forward**: send `F`. The sketch holds at 11 evenly spaced pulse widths (830–2170 µs) and prompts 3× per point for the angle read off the current photo — type it, press enter, repeat.
 5. **Sweep backward**: send `B` — same 11 pulse widths, descending. Don't skip this; it's the only way backlash gets caught.
-6. **Capture the log**: save the full Serial Monitor session to a text file, strip lines starting with `# `. What's left is bare `pulse_width_us,angle_deg` lines — save the `F` run as `cal_servo<N>_fwd.csv` and the `B` run as `cal_servo<N>_bwd.csv`.
-7. Repeat steps 3–6 for all 3 servos (6 CSVs total: `cal_servo1_fwd.csv`, `cal_servo1_bwd.csv`, `cal_servo2_fwd.csv`, ...).
+6. **Hold-out points**: send `P<us>` for 2–3 pulse widths *not* on the sweep grid (e.g. `P1050`, `P1450`, `P1850`) and read the angle the same way. These are the only data step 13 can use.
+7. **Capture the log**: save the full Serial Monitor session to a text file (all servos can share one file) and run `out = parse_sweep_log('log.txt', 'cal_data')` from `Calibration_LUT/`. It splits on the sketch's `# BEGIN`/`# END` markers and writes `cal_servo<N>_fwd.csv`, `cal_servo<N>_bwd.csv`, the combined `cal_servo<N>.csv` (Phase 1 input) and `cal_servo<N>_holdout.csv`. No hand-stripping.
+8. Repeat steps 3–6 for all 3 servos, then run step 7 once.
 
 **Phase 1 — linear fit, get the pipeline running on real numbers:**
 
-8. `Kinematics/calibrate_servos.m` expects one CSV per servo, no fwd/bwd split. Bridge the data by concatenating each servo's `_fwd.csv` and `_bwd.csv` into a single file (a direction-blind linear fit is fine here — Phase 1 isn't trying to model backlash). Run `calibrate_servos.m` against the 3 combined files → get `k_us`/`sgn`/`pw_home` per servo.
-9. Paste those into `Kinematics/init_scan.m`, replacing the placeholders. Re-run the pipeline (`init_scan.m` → Simulink `S01_Scan_pipe.slx`) and re-check pulse headroom / `th_lim` — real per-servo `k_us` values will likely differ from each other, unlike the placeholders.
-10. `pulse_table.csv` now reflects real hardware. Bench-test before moving on.
+9. `Kinematics/calibrate_servos.m` expects one CSV per servo, no fwd/bwd split — that is the combined `cal_servo<N>.csv` from step 7 (a direction-blind linear fit is fine here — Phase 1 isn't trying to model backlash). Run `calibrate_servos({out.combined})` → get `k_us`/`sgn`/`pw_home` per servo.
+10. Paste those into `Kinematics/init_scan.m`, replacing the placeholders. Re-run the pipeline (`init_scan.m` → Simulink `S01_Scan_pipe.slx`) and re-check pulse headroom / `th_lim` — real per-servo `k_us` values will likely differ from each other, unlike the placeholders.
+11. `pulse_table.csv` now reflects real hardware. Bench-test before moving on.
 
 **Phase 2 — lookup table, second pass on the same data:**
 
-11. Run `Calibration_LUT/calibrate_servos_lut.m` against the original 6 fwd/bwd CSVs (unmodified — this function wants the direction split) → per-servo lookup tables + backlash figure.
-12. Validate: command a few angles *not* used in either fit, check the camera-measured result against both Phase 1's linear prediction and Phase 2's table prediction. Compare residual error.
-13. **Decide**: if Phase 2's residuals are meaningfully smaller, wire `Calibration_LUT/`'s functions into `init_scan.m`/Simulink per its README and regenerate `pulse_table.csv` again. If not, Phase 1's result stands as final — either way, the comparison itself is worth a line in the report.
+12. Run `calibrate_servos_lut({out.fwd}, {out.bwd})` against the 6 fwd/bwd CSVs (this function wants the direction split) → per-servo lookup tables + backlash figure.
+13. Validate: `compare_calibrations({out.holdout}, k_us, sgn, pw_home, cal_angle, cal_pw, pw_min, pw_max)` prints per-servo RMS/max residual for both methods on the step-6 hold-out points, in degrees and in µs through the real `angle_to_pulse` / `angle_to_pulse_lut` code paths.
+14. **Decide**: if Phase 2's residuals are meaningfully smaller (bigger than the repeat spread and backlash step 12 reported), wire `Calibration_LUT/`'s functions into `init_scan.m`/Simulink per its README and regenerate `pulse_table.csv` again. If not, Phase 1's result stands as final — either way, the comparison itself is worth a line in the report.
 
 ## Key numbers from the research (condensed — full citations in `reports/Servo PWM calibration methods.md`)
 
@@ -83,7 +84,9 @@ Kinematics/calibrate_servos.m       - Phase 1: baseline linear-fit calibration (
 Kinematics/angle_to_pulse.m         - Phase 1: baseline linear angle->pulse conversion (production path)
 Calibration_LUT/calibrate_servos_lut.m       - Phase 2: lookup-table calibration (isolated, opt-in)
 Calibration_LUT/angle_to_pulse_lut.m         - Phase 2: lookup-table angle->pulse conversion (isolated, opt-in)
-Calibration_LUT/servo_calibration_sweep/*.ino - Arduino sweep-and-log sketch (shared by both phases)
+Calibration_LUT/parse_sweep_log.m            - serial log -> all CSVs (fwd, bwd, combined, holdout)
+Calibration_LUT/compare_calibrations.m       - step 13: linear vs table residuals on hold-out points
+Calibration_LUT/servo_calibration_sweep/*.ino - Arduino sweep-and-log sketch (shared by both phases); P<us> logs hold-out points
 Calibration_LUT/README.md                    - usage + how to adopt Phase 2
 reports/Servo PWM calibration methods.md     - full research synthesis
 research_notes/Servo PWM calibration methods/ - raw research notes (5 files)
