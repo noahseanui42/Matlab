@@ -18,11 +18,18 @@ constexpr float L_LO = 625.0f;   // forearm (HANDOFF §4 Q2: confirmed 625 mm)
 // Per-servo calibration. index = arm number - 1. arm 1 on -y axis; arms 1->2->3 CCW viewed from above.
 // us = centre_us + dir * us_per_deg * theta_deg ; theta > 0 = bicep DOWN
 // Pin mapping (HANDOFF §4 Q3, default confirmed): D9=arm1, D10=arm2, D11=arm3.
+//
+// Measured with each arm driven individually, rest of the linkage resting
+// flat -- NOT yet reconfirmed with the full assembly (bring-up §10 steps
+// 4-5: support near flat, enable, jog the full range, compare against the
+// GUI's plot). min_deg/max_deg may need tightening (or could loosen
+// slightly) once that's done; see README's reachability note.
+// centre_us = 1520 + trim_us from the calibration tool's output.
 struct ServoCal { uint8_t pin; float centre_us; float us_per_deg; int8_t dir; float min_deg; float max_deg; };
 constexpr ServoCal CAL[3] = {
-  { 9, 1520.0f, 8.0f, +1, -30.0f, 80.0f},  // TODO(calibrate)
-  {10, 1520.0f, 8.0f, +1, -30.0f, 80.0f},  // TODO(calibrate)
-  {11, 1520.0f, 8.0f, +1, -30.0f, 80.0f},  // TODO(calibrate)
+  { 9, 1460.0f, 11.8231f, +1, -16.0f, 26.5f},  // arm1 (trim_us=-60)
+  {10, 1385.0f, 10.0481f, +1, -20.5f, 26.5f},  // arm2 (trim_us=-135)
+  {11, 1410.0f, 10.5544f, +1, -25.0f, 29.5f},  // arm3 (trim_us=-110)
 };
 constexpr int   US_MIN = 830, US_MAX = 2170;
 

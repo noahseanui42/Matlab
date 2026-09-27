@@ -65,26 +65,43 @@ These were confirmed with the user before implementation:
 4. **Probe TCP offset:** `(0, 0, −21)` mm — centred, 21 mm below the
    effector's ball-joint-axis centre. Lives in `delta_app/robot_config.py`;
    the firmware itself has no concept of TCP (see protocol notes below).
-5. **GUI host** (OS / Python version / serial port) wasn't known yet.
-   `robot_config.SERIAL_PORT_DEFAULT` is left as `"COM3"` as a placeholder —
-   **update it** once the host is known. `deltagui.py`'s `iconbitmap()`
-   calls are wrapped in `try/except tk.TclError` so the GUI still launches
-   on macOS/Linux, which don't support `.ico` window icons.
-6. Angle limits (`config.h`'s `CAL[i].min_deg/max_deg` and
-   `robot_config.ANGLE_LIMITS_DEG`) are still **`TODO(calibrate)`
-   placeholders** (`-30°..80°`) — see [Calibration](#calibration-procedure).
+5. **GUI host:** macOS, confirmed during bring-up. `robot_config.SERIAL_PORT_DEFAULT`
+   is set to `/dev/cu.usbmodem14101` and `SERIAL_DTR = True` (the R4's native
+   USB CDC needed DTR asserted before any data reached the host — see the
+   [macOS bring-up fixes](#macos-bring-up-fixes-found-during-testing) below).
+   Re-check the port string if you plug into a different USB port/cable.
+6. **Angle limits are now real, calibrated values** (measured 2026-09-26,
+   one arm at a time, rest of the linkage resting flat):
+
+   | Arm | Pin | centre_us | us_per_deg | dir | min_deg | max_deg |
+   |---|---|---|---|---|---|---|
+   | 1 | D9 | 1460 | 11.8231 | +1 | −16.0 | 26.5 |
+   | 2 | D10 | 1385 | 10.0481 | +1 | −20.5 | 26.5 |
+   | 3 | D11 | 1410 | 10.5544 | +1 | −25.0 | 29.5 |
+
+   **These are single-arm measurements, not yet reconfirmed with the full
+   assembly** (bring-up §10 steps 4-5 — support the arms near flat, enable,
+   jog the full range with all three linked together, and compare against
+   the GUI's plot). The coupled parallelogram linkage could tighten these
+   further, or allow slightly more — don't treat them as final until that
+   pass is done.
 
 ### Reachability finding — flagged loudly
 
-**With the confirmed geometry (L_LO=625mm) and placeholder ±(-30°..80°)
-joint limits, the project's stated scan target of z ≈ −450 to −750 mm is
-only partly reachable.** On-axis (x=y=0), the workspace bottoms out at
-z=−750mm (θ≈46.8°) but tops out around **z≈−530mm** (θ≈−27.3°, close to the
--30° limit) — **z=−450mm is not reachable** with these joint limits; it
-would need the bicep angled further up than −30° allows. This will change
-once real mechanical limits are measured (§10.3) and entered into `config.h`
-and `robot_config.py` — recheck the reachable envelope after calibration,
-before relying on the full −450..−750 mm scan range.
+**With the real calibrated limits above, the reachable envelope is far
+smaller than the project's stated z ≈ −450 to −750 mm scan target — smaller
+even than the earlier placeholder-limit estimate.** On-axis (x=y=0), the
+workspace now only spans roughly **z≈−561mm to z≈−692mm** (θ from about
+−16° to 26.5°, arm 1 binding both ends). Off-axis it's tighter still. This
+is a real, measured constraint, not a bug: **the −450 to −750 mm scan range
+in the project brief is not achievable with these servos/geometry/limits as
+currently measured.** Options once the full-assembly recheck (above) is
+done: confirm whether the coupled linkage genuinely allows a wider range
+than the single-arm test suggested, or treat the achievable envelope
+(≈580mm-ish of z travel, centred lower than originally planned) as the real
+scan volume for this build and adjust the Helmholtz coil measurement plan
+accordingly. `tests/test_kinematics.py`'s regression values and grid are
+scoped to this real reachable band.
 
 ## Serial protocol (must match the GUI byte-for-byte)
 
@@ -151,10 +168,45 @@ disable→enable cycle snaps back to whatever was last commanded (not to
 flat), because θ/xyz were never touched while disabled. Both behaviours
 described in HANDOFF §6.4 fall out of this one rule.
 
+## macOS bring-up fixes found during testing
+
+None of these were anticipated in the original plan — found live while
+actually running the GUI on the macOS host (§4 Q5):
+
+- **No data arrived until `SERIAL_DTR = True`.** The R4's native USB CDC
+  needed DTR asserted before the OS-level connection was actually "live",
+  even though the sketch itself never checks `Serial`/DTR. Symptom: the GUI
+  connected with no error, but every `readline()` came back empty
+  (`JSONDecodeError('Expecting value: line 1 column 1 (char 0)')` spamming
+  the terminal).
+- **Every label was invisible (white-on-white) in macOS Dark Mode.** Classic
+  `tk.Label`/`tk.Button` widgets that set `bg="White"` without an explicit
+  `fg` inherit the system text colour, which resolves to white in Dark
+  Mode. Fixed with `root.option_add('*Foreground', 'black')` /
+  `option_add('*Background', 'white')` right after creating the root window.
+- **"Program" and "Available COMs" menu items didn't exist on macOS at
+  all** (not even greyed out) — they were bare top-level
+  `tk.Menu.add_command()` calls; macOS's native menu bar only renders
+  cascade (dropdown) menus, silently dropping bare top-level commands.
+  Moved into the "File" cascade. The Program Creator popup's own "Open" /
+  "Save" / "Save as" had the identical bug and got the identical fix.
+- **The window (1100x700, later 1500x850) clipped on a 1440x900 laptop
+  screen**, and macOS's "Enter Full Screen" doesn't resize classic Tk
+  windows (it just moves the same-sized window into its own Space), so
+  fullscreening didn't help. Fixed two ways together: size the window to
+  `min(1500, screen_w-60) x min(850, screen_h-100)` at launch instead of a
+  fixed constant, and shrink the 3D plot from 6x6in to 4.8x4.8in so the
+  layout's actual content fits a 900px-tall screen in the first place.
+
 ## Calibration procedure
 
-Use the existing `servo_calibration_v3.ino` (untouched) for each servo in
-turn, on D9/D10/D11:
+`config.h`/`robot_config.py` currently hold real values measured on
+2026-09-26 (see the table under [Assumptions made](#assumptions-made-handoff-4-answers)),
+gathered with a separate host-side calibration tool (`python -m
+host.calibrate`, writing `trim_us`/`sign`/`us_per_deg`/limits — not part of
+this repo), one arm at a time with the rest of the linkage flat. To
+recalibrate, or to use the originally-planned `servo_calibration_v3.ino`
+instead, for each servo in turn on D9/D10/D11:
 
 1. **Centre** — the µs value where the bicep is level → `config.h`'s
    `CAL[i].centre_us`.

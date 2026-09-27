@@ -14,10 +14,11 @@ L_UP = 180.0   # bicep, pivot to pivot
 L_LO = 625.0   # forearm, pivot to pivot (HANDOFF §4 Q2: confirmed 625 mm)
 
 # Per-arm joint angle limits, degrees. index = arm number - 1.
-# TODO(calibrate): placeholders until the user measures mechanical limits
-# with servo_calibration_v3.ino. Must equal delta_servo/config.h's CAL[i]
-# min_deg/max_deg exactly (enforced by tests/test_config_sync.py).
-ANGLE_LIMITS_DEG = [(-30.0, 80.0), (-30.0, 80.0), (-30.0, 80.0)]
+# Measured with each arm driven individually, rest of the linkage resting
+# flat -- NOT yet reconfirmed with the full assembly (bring-up §10 steps
+# 4-5). Must equal delta_servo/config.h's CAL[i] min_deg/max_deg exactly
+# (enforced by tests/test_config_sync.py).
+ANGLE_LIMITS_DEG = [(-16.0, 26.5), (-20.5, 26.5), (-25.0, 29.5)]
 
 Z_MAX = -300.0          # upper z guard (TCP point), replaces upstream's hard-coded -70
 Z_LIMIT_DEFAULT = -800.0
@@ -26,5 +27,5 @@ JOG_STEP_DEFAULT = 5.0
 
 ELBOW_JOINT_WIDTH = 45.0  # TODO: replace with the user's actual parallelogram rod spacing (plot only)
 
-SERIAL_PORT_DEFAULT = "COM3"  # TODO: set to the actual port once the GUI host is known
-SERIAL_DTR = False             # flip to True if no stream arrives from the R4
+SERIAL_PORT_DEFAULT = "/dev/cu.usbmodem14101"  # confirmed during bring-up on the GUI Mac
+SERIAL_DTR = True               # confirmed needed during bring-up: no stream arrived at False

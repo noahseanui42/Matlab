@@ -160,8 +160,10 @@ void test_linear_mode_intermediate_on_segment() {
 void test_linear_mode_unreachable_sets_e2_and_holds() {
   Motion m;
   m.enable(0);
-  float a[3] = {-99, 81, -539};
-  float b[3] = {-116, -65, -525};
+  // Re-derived for the real calibrated CAL limits (much tighter than the
+  // old +-(-30,80) placeholder these were originally found under).
+  float a[3] = {-18, -13, -565};
+  float b[3] = {-80, -83, -569};
   float thetaA[3];
   CHECK(ik(a, thetaA));
   float thetaB[3];
