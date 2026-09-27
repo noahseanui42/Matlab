@@ -143,13 +143,20 @@ class DeltaGUI:
         self.file_menu = tk.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label='File', menu=self.file_menu)
         self.file_menu.add_command(label="Settings", command=self.settingsWindow)
+        # "Program" and "Available COMs" used to be bare commands added
+        # directly to self.menubar. On macOS's native menu bar, only cascade
+        # (dropdown) menus render -- a bare top-level command is silently
+        # dropped, so these two were never visible/clickable at all on
+        # macOS (only File/Plots, which are cascades, ever showed up).
+        # Moved into the File menu, where add_command works fine because
+        # it's inside an actual dropdown.
+        self.file_menu.add_command(label="Program", command=self.programCreator)
+        self.file_menu.add_command(label="Available COMs", command=showAvailableComs)
         self.file_menu.add_command(label='Exit', command=self.exit)
-        self.menubar.add_command(label='Program', command=self.programCreator)
         self.plot_menu = tk.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label='Plots', menu=self.plot_menu)
         self.plot_menu.add_command(label='Joints', command=self.create2DPlotAngles)
         self.plot_menu.add_command(label='XYZ', command=self.create2DPlotxyz)
-        self.menubar.add_command(label="Available COMs", command=showAvailableComs)
         self.menubar.add_command(label="Available pins", command=showAvailablePins)
 
         self.serialPortFrame(self.root, row=0, column=1, rowspan=1, columnspan=3, sticky='s')
