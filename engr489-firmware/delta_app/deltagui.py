@@ -54,6 +54,13 @@ class DeltaGUI:
         self.acceleration = 0
         self.interpolation = 0
         self.root = tk.Tk()
+        # Fix for macOS Dark Mode: classic tk widgets that set bg="White"
+        # without an explicit fg inherit the system text colour, which in
+        # Dark Mode resolves to white -- invisible white-on-white text on
+        # every label/button in this GUI. Force sane defaults up front so
+        # this doesn't depend on the user's system appearance setting.
+        self.root.option_add('*Foreground', 'black')
+        self.root.option_add('*Background', 'white')
         self.root.geometry('1100x700')
         self.root.title("Delta GUI")
         self.root.config(padx=50, pady=20, bg="white")
