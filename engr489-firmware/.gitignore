@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/ik_cli
+tests/protocol_test
+tests/motion_test
+*.o

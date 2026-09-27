@@ -1,0 +1,31 @@
+# Derived from grzesiek2201/Delta-Robot (GPL-3.0) @ 48a8038
+# https://github.com/grzesiek2201/Delta-Robot
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=False, order=True)
+class VerticesCoordinates:
+    X0: list[float] = field(default_factory=list)
+    X1: list[float] = field(default_factory=list)
+    X2: list[float] = field(default_factory=list)
+    X3: list[float] = field(default_factory=list)
+    X4: list[float] = field(default_factory=list)
+    X5: list[float] = field(default_factory=list)
+    X6: list[float] = field(default_factory=list)
+    Y0: list[float] = field(default_factory=list)
+    Y1: list[float] = field(default_factory=list)
+    Y2: list[float] = field(default_factory=list)
+    Y3: list[float] = field(default_factory=list)
+    Y4: list[float] = field(default_factory=list)
+    Y5: list[float] = field(default_factory=list)
+    Y6: list[float] = field(default_factory=list)
+    Z0: list[float] = field(default_factory=list)
+    Z1: list[float] = field(default_factory=list)
+    Z2: list[float] = field(default_factory=list)
+    Z3: list[float] = field(default_factory=list)
+    Z4: list[float] = field(default_factory=list)
+    Z5: list[float] = field(default_factory=list)
+    Z6: list[float] = field(default_factory=list)
+    coordinates_x: list[list[float]] = field(default_factory=list)
+    coordinates_y: list[list[float]] = field(default_factory=list)
+    coordinates_z: list[list[float]] = field(default_factory=list)
