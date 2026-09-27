@@ -1076,9 +1076,15 @@ class DeltaGUI:
         """ Menu bar in the program_creator pop-up window """
         self.program_creator_menu = tk.Menu(master)
         master.config(menu=self.program_creator_menu)
-        self.program_creator_menu.add_command(label="Open", command=self.openProgram)
-        self.program_creator_menu.add_command(label="Save", command=self.saveProgram)
-        self.program_creator_menu.add_command(label="Save as", command=self.saveProgramAs)
+        # Same macOS menu bar issue as the main window's "Program"/
+        # "Available COMs" (see __init__): a bare top-level add_command()
+        # on a Toplevel's menu is invisible on macOS, only cascades render.
+        # Wrap Open/Save/Save as in a "File" cascade so they actually show.
+        self.program_creator_file_menu = tk.Menu(self.program_creator_menu, tearoff=0)
+        self.program_creator_menu.add_cascade(label="File", menu=self.program_creator_file_menu)
+        self.program_creator_file_menu.add_command(label="Open", command=self.openProgram)
+        self.program_creator_file_menu.add_command(label="Save", command=self.saveProgram)
+        self.program_creator_file_menu.add_command(label="Save as", command=self.saveProgramAs)
 
     def writeSettings(self):
         """ Set value written in the configtcp popup window entries into delta object """
