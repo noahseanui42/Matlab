@@ -62,10 +62,20 @@ class DeltaGUI:
         self.root.option_add('*Foreground', 'black')
         self.root.option_add('*Background', 'white')
         # 1100x700 clipped the layout (control panel + padding + the 600x600
-        # 3D plot need close to 1200px wide); macOS's native "Enter Full
+        # 3D plot need close to 1200px wide), and macOS's native "Enter Full
         # Screen" doesn't resize classic Tk windows, so a cramped default
-        # stayed cramped even fullscreened. Size it to fit up front instead.
-        self.root.geometry('1500x850')
+        # stayed cramped even fullscreened. A larger fixed size just clips
+        # against smaller screens instead, so size to whatever screen this
+        # actually runs on (capped at the layout's natural 1500x850) and
+        # start it at the screen's top-left corner, not centred, so a
+        # window taller/wider than the visible screen doesn't hide its own
+        # top-left corner (title bar, Connect button) off-screen.
+        self.root.resizable(True, True)
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        win_w = min(1500, screen_w - 60)
+        win_h = min(850, screen_h - 100)
+        self.root.geometry(f'{win_w}x{win_h}+10+10')
         self.root.title("Delta GUI")
         self.root.config(padx=50, pady=20, bg="white")
         try:
@@ -1640,7 +1650,11 @@ class DeltaGUI:
     def create3DPlot(self, master):
         """ Create 3D plot in the master window """
         # Create figure
-        self.fig_robot = plt.figure(figsize=(6, 6), dpi=100)
+        # Shrunk from 6x6: on a 1440x900 screen the left control column plus
+        # a 6x6 (600px) plot needed more vertical room than macOS leaves
+        # below the menu bar, clipping the bottom of the window regardless
+        # of how the window itself was sized.
+        self.fig_robot = plt.figure(figsize=(4.8, 4.8), dpi=100)
         self.ax = self.fig_robot.add_subplot(111, projection="3d")
         self.ax.set_xlim(-800, 800)
         self.ax.set_ylim(-800, 800)
