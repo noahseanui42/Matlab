@@ -1650,7 +1650,11 @@ class DeltaGUI:
     def create3DPlot(self, master):
         """ Create 3D plot in the master window """
         # Create figure
-        self.fig_robot = plt.figure(figsize=(6, 6), dpi=100)
+        # Shrunk from 6x6: on a 1440x900 screen the left control column plus
+        # a 6x6 (600px) plot needed more vertical room than macOS leaves
+        # below the menu bar, clipping the bottom of the window regardless
+        # of how the window itself was sized.
+        self.fig_robot = plt.figure(figsize=(4.8, 4.8), dpi=100)
         self.ax = self.fig_robot.add_subplot(111, projection="3d")
         self.ax.set_xlim(-800, 800)
         self.ax.set_ylim(-800, 800)
