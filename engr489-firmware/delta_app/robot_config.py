@@ -28,7 +28,7 @@ Z_LIMIT_DEFAULT = -800.0
 TCP_DEFAULT = (0.0, 0.0, -21.0)  # HANDOFF §4 Q6: TCP centred, 21 mm below the effector's ball-joint axis
 JOG_STEP_DEFAULT = 5.0
 
-ELBOW_JOINT_WIDTH = 45.0  # TODO: replace with the user's actual parallelogram rod spacing (plot only)
+ELBOW_JOINT_WIDTH = 35.0  # user's actual parallelogram rod spacing, confirmed (plot only)
 
 SERIAL_PORT_DEFAULT = "/dev/cu.usbmodem14101"  # confirmed during bring-up on the GUI Mac
 SERIAL_DTR = True               # confirmed needed during bring-up: no stream arrived at False
