@@ -61,7 +61,11 @@ class DeltaGUI:
         # this doesn't depend on the user's system appearance setting.
         self.root.option_add('*Foreground', 'black')
         self.root.option_add('*Background', 'white')
-        self.root.geometry('1100x700')
+        # 1100x700 clipped the layout (control panel + padding + the 600x600
+        # 3D plot need close to 1200px wide); macOS's native "Enter Full
+        # Screen" doesn't resize classic Tk windows, so a cramped default
+        # stayed cramped even fullscreened. Size it to fit up front instead.
+        self.root.geometry('1500x850')
         self.root.title("Delta GUI")
         self.root.config(padx=50, pady=20, bg="white")
         try:
