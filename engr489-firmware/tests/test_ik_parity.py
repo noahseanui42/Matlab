@@ -33,11 +33,11 @@ def build_ik_cli():
 
 
 def grid_points():
-    # Scoped to the real calibrated limits' reachable band (config.h/
-    # robot_config.py), not the old ±(-30,80) placeholder's much wider one.
-    for x in range(-80, 81, 20):
-        for y in range(-80, 81, 20):
-            for z in range(-680, -559, 15):
+    # Scoped to the real calibrated -20/70 deg limits' reachable band
+    # (config.h/robot_config.py), confirmed with the full 3-arm assembly.
+    for x in range(-150, 151, 25):
+        for y in range(-150, 151, 25):
+            for z in range(-790, -549, 25):
                 yield (x, y, z)
 
 

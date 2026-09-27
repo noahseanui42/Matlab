@@ -160,10 +160,12 @@ void test_linear_mode_intermediate_on_segment() {
 void test_linear_mode_unreachable_sets_e2_and_holds() {
   Motion m;
   m.enable(0);
-  // Re-derived for the real calibrated CAL limits (much tighter than the
-  // old +-(-30,80) placeholder these were originally found under).
-  float a[3] = {-18, -13, -565};
-  float b[3] = {-80, -83, -569};
+  // Re-derived for the real calibrated CAL limits (-20/70 deg, confirmed
+  // with the full 3-arm assembly). These points are lateral extremes just
+  // to exercise the IK-failure code path; they don't need to be a
+  // physically sensible probe position for this unit test.
+  float a[3] = {-97, 27, -566};
+  float b[3] = {-191, 166, -552};
   float thetaA[3];
   CHECK(ik(a, thetaA));
   float thetaB[3];

@@ -70,38 +70,46 @@ These were confirmed with the user before implementation:
    USB CDC needed DTR asserted before any data reached the host — see the
    [macOS bring-up fixes](#macos-bring-up-fixes-found-during-testing) below).
    Re-check the port string if you plug into a different USB port/cable.
-6. **Angle limits are now real, calibrated values** (measured 2026-09-26,
-   one arm at a time, rest of the linkage resting flat):
+6. **Angle limits are now real, calibrated values**, in two passes:
+
+   - **Pass 1 (single-arm, 2026-09-26):** each arm driven individually, rest
+     of the linkage resting flat, gave per-arm limits around −16° to
+     −25°/26.5° to 29.5°. **This turned out to be falsely tight** — driving
+     one arm while the other two are slack lets the effector plate sag/tilt
+     out of level, creating an early collision with the (unsupported) plate
+     that doesn't happen in real coordinated operation.
+   - **Pass 2 (full 3-arm assembly, confirmed same day):** all three servos
+     enabled and jogged together, plate properly held level throughout —
+     the real usable range turned out to be **−20° to 70°** on all three
+     arms, described as a safe margin rather than the absolute mechanical
+     stop (there may be more room past this).
 
    | Arm | Pin | centre_us | us_per_deg | dir | min_deg | max_deg |
    |---|---|---|---|---|---|---|
-   | 1 | D9 | 1460 | 11.8231 | +1 | −16.0 | 26.5 |
-   | 2 | D10 | 1385 | 10.0481 | +1 | −20.5 | 26.5 |
-   | 3 | D11 | 1410 | 10.5544 | +1 | −25.0 | 29.5 |
+   | 1 | D9 | 1460 | 11.8231 | +1 | −20.0 | 70.0 |
+   | 2 | D10 | 1385 | 10.0481 | +1 | −20.0 | 70.0 |
+   | 3 | D11 | 1410 | 10.5544 | +1 | −20.0 | 70.0 |
 
-   **These are single-arm measurements, not yet reconfirmed with the full
-   assembly** (bring-up §10 steps 4-5 — support the arms near flat, enable,
-   jog the full range with all three linked together, and compare against
-   the GUI's plot). The coupled parallelogram linkage could tighten these
-   further, or allow slightly more — don't treat them as final until that
-   pass is done.
+   `centre_us`/`us_per_deg`/`dir` are still per-arm (from the single-arm
+   pass — that part of the measurement isn't affected by plate sag); only
+   `min_deg`/`max_deg` came from the full-assembly recheck.
 
-### Reachability finding — flagged loudly
+### Reachability finding
 
-**With the real calibrated limits above, the reachable envelope is far
-smaller than the project's stated z ≈ −450 to −750 mm scan target — smaller
-even than the earlier placeholder-limit estimate.** On-axis (x=y=0), the
-workspace now only spans roughly **z≈−561mm to z≈−692mm** (θ from about
-−16° to 26.5°, arm 1 binding both ends). Off-axis it's tighter still. This
-is a real, measured constraint, not a bug: **the −450 to −750 mm scan range
-in the project brief is not achievable with these servos/geometry/limits as
-currently measured.** Options once the full-assembly recheck (above) is
-done: confirm whether the coupled linkage genuinely allows a wider range
-than the single-arm test suggested, or treat the achievable envelope
-(≈580mm-ish of z travel, centred lower than originally planned) as the real
-scan volume for this build and adjust the Helmholtz coil measurement plan
-accordingly. `tests/test_kinematics.py`'s regression values and grid are
-scoped to this real reachable band.
+With the corrected full-assembly limits (−20° to 70°), the reachable
+envelope is **much closer to the project's z ≈ −450 to −750 mm scan
+target** than either earlier estimate. On-axis (x=y=0), the workspace now
+spans roughly **z≈−550mm to z≈−793mm** — covering the entire deep half of
+the target range and then some, though still about 100mm short at the
+shallow end (−450 to −550mm remains unreachable; θ=−20° bottoms out around
+z=−550mm). Off-axis, a broad grid (x,y∈[−150,150]mm, z∈[−790,−550]mm, 25mm
+steps) has ~89% of points reachable (1501/1690).
+
+If the shallow 100mm matters for the coil measurement plan, it's worth
+re-probing whether −20° really is the safe floor or was itself set with
+some margin to spare — otherwise, treat −550..−793mm as the real scan
+volume for this build. `tests/test_kinematics.py`'s regression values and
+grid are scoped to this range.
 
 ## Serial protocol (must match the GUI byte-for-byte)
 
@@ -204,17 +212,23 @@ actually running the GUI on the macOS host (§4 Q5):
 2026-09-26 (see the table under [Assumptions made](#assumptions-made-handoff-4-answers)),
 gathered with a separate host-side calibration tool (`python -m
 host.calibrate`, writing `trim_us`/`sign`/`us_per_deg`/limits — not part of
-this repo), one arm at a time with the rest of the linkage flat. To
-recalibrate, or to use the originally-planned `servo_calibration_v3.ino`
-instead, for each servo in turn on D9/D10/D11:
+this repo). **`centre_us`/`us_per_deg`/`dir` came from driving each arm
+individually; `min_deg`/`max_deg` came from a second pass with all three
+arms enabled and jogged together** — do the angle-limit part with the full
+assembly, not a single arm, or you'll get a falsely tight number (see the
+reachability note above for why). To recalibrate, or to use the
+originally-planned `servo_calibration_v3.ino` instead, for each servo in
+turn on D9/D10/D11:
 
 1. **Centre** — the µs value where the bicep is level → `config.h`'s
    `CAL[i].centre_us`.
 2. **`us_per_deg` and `dir`** — a linear fit through 5 points (e.g. 1200,
    1360, 1520, 1680, 1840 µs), each measured with an angle finder on the
    bicep.
-3. **Mechanical min/max** — the bicep rising into the plate slot, and the
-   lower limit.
+3. **Angle limits — with all three arms enabled and linked together**,
+   plate held level, jog toward each extreme and note the real interference
+   point (the bicep rising into the plate slot, or the lower limit) — not a
+   single arm with the others slack.
 4. Enter all values in **both** `delta_servo/config.h`'s `CAL[i]` and
    `delta_app/robot_config.py`'s `ANGLE_LIMITS_DEG` — `tests/test_config_sync.py`
    fails the build if they disagree. Angle limits = the tighter of the
@@ -263,11 +277,11 @@ introduced by this port):
 
 - `deltarobot.py`'s `calculateFPK()` nudges z by ±0.01mm whenever two
   computed elbow heights coincide (its own pre-existing div-by-zero guard)
-  — this measurably biases FK output (~0.02-0.08mm) for any point with two
-  equal joint angles (e.g. every point on the x=0 plane). `IK` itself has
-  no such nudge, so real runtime accuracy is unaffected; the FK/IK
-  round-trip test tolerance is loosened to 0.1mm to account for it rather
-  than hide it in a tighter "passing" number.
+  — this measurably biases FK output (up to ~0.17mm, growing with depth) for
+  any point with two equal joint angles (e.g. every point on the x=0
+  plane). `IK` itself has no such nudge, so real runtime accuracy is
+  unaffected; the FK/IK round-trip test tolerance is loosened to 0.2mm to
+  account for it rather than hide it in a tighter "passing" number.
 - Near configurations where `kinematics.cpp`'s IK denominator `(G-E)` is
   small relative to `E`/`G`'s own magnitude, the solve is ill-conditioned:
   float32 (firmware) and float64 (`deltarobot.py`) round to meaningfully

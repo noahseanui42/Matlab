@@ -19,17 +19,22 @@ constexpr float L_LO = 625.0f;   // forearm (HANDOFF §4 Q2: confirmed 625 mm)
 // us = centre_us + dir * us_per_deg * theta_deg ; theta > 0 = bicep DOWN
 // Pin mapping (HANDOFF §4 Q3, default confirmed): D9=arm1, D10=arm2, D11=arm3.
 //
-// Measured with each arm driven individually, rest of the linkage resting
-// flat -- NOT yet reconfirmed with the full assembly (bring-up §10 steps
-// 4-5: support near flat, enable, jog the full range, compare against the
-// GUI's plot). min_deg/max_deg may need tightening (or could loosen
-// slightly) once that's done; see README's reachability note.
+// centre_us/us_per_deg/dir: per-arm, measured with each arm driven
+// individually (rest of the linkage resting flat).
+//
+// min_deg/max_deg: reconfirmed with the FULL 3-arm assembly (bring-up §10
+// steps 4-5, all three enabled and jogged together) -- the single-arm
+// numbers above under-measured the true range, because driving one arm
+// while the other two are slack lets the effector plate sag/tilt out of
+// level, creating an early false collision that doesn't happen when all
+// three hold the plate level together. -20/70 deg is described as a safe
+// margin, not the absolute mechanical stop -- there may be more room.
 // centre_us = 1520 + trim_us from the calibration tool's output.
 struct ServoCal { uint8_t pin; float centre_us; float us_per_deg; int8_t dir; float min_deg; float max_deg; };
 constexpr ServoCal CAL[3] = {
-  { 9, 1460.0f, 11.8231f, +1, -16.0f, 26.5f},  // arm1 (trim_us=-60)
-  {10, 1385.0f, 10.0481f, +1, -20.5f, 26.5f},  // arm2 (trim_us=-135)
-  {11, 1410.0f, 10.5544f, +1, -25.0f, 29.5f},  // arm3 (trim_us=-110)
+  { 9, 1460.0f, 11.8231f, +1, -20.0f, 70.0f},  // arm1 (trim_us=-60)
+  {10, 1385.0f, 10.0481f, +1, -20.0f, 70.0f},  // arm2 (trim_us=-135)
+  {11, 1410.0f, 10.5544f, +1, -20.0f, 70.0f},  // arm3 (trim_us=-110)
 };
 constexpr int   US_MIN = 830, US_MAX = 2170;
 
