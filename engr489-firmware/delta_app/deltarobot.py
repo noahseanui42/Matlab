@@ -199,32 +199,81 @@ class DeltaRobot():
             a1 = a11 / a13 - a21 / a23
             a2 = a22 / a23 - a12 / a13
             a3 = b1 / a13 - b2 / a23
-            a4 = a2 / a1
-            a5 = a3 / a1
-            a6 = (-a21 * a4 - a22) / a23
-            a7 = (b2 - a21 * a5) / a23
 
-            # Third substitutions
-            a = a4 ** 2 + a6 ** 2 + 1
-            b = 2 * a4 * (a5 - x1) + 2 * a6 * (a7 - z1) - 2 * y1
-            c = a5 * (a5 - 2 * x1) + a7 * (a7 - 2 * z1) + x12 + y12 + z12 - r12
+            # a1 == 0 means points 1..3 project to a collinear line in the
+            # x-z plane (e.g. fi1 == 0 and fi2 == -fi3), so eliminating z
+            # leaves an equation with no x term and a4 = a2 / a1 would
+            # divide by zero. This is a real configuration a physical robot
+            # can pass through, not just an exact-rest edge case, and it
+            # doesn't announce itself only via a1 == 0: a1 can also come out
+            # merely tiny (catastrophic cancellation of a11/a13 and a21/a23)
+            # right next to the singularity, which silently blows up a4, a5
+            # instead of raising. So pivot: also compute the analogous ratio
+            # a1b from eliminating y (dividing by the y-coefficients a12,
+            # a22 instead of a13, a23) whenever that's well-defined, and use
+            # whichever elimination is better conditioned (larger |a1*|).
+            a1b = None
+            if a12 != 0 and a22 != 0:
+                a1b = a11 / a12 - a21 / a22
 
-            if b ** 2 - 4 * a * c < 0:
-                print("Provided angles are not correct. Check for Joint angle sensing error.")
-                raise TypeError
+            if a1 == 0 or (a1b is not None and abs(a1b) > abs(a1)):
+                if a1b is None or a1b == 0:
+                    print("Provided angles are not correct. Check for Joint angle sensing error.")
+                    raise TypeError
 
-            y_sqrt = sqrt(b ** 2 - (4 * a * c))
-            y1 = (-b + y_sqrt) / (2 * a)  # positive y coordinate
-            y2 = (-b - y_sqrt) / (2 * a)
+                a2b = a23 / a22 - a13 / a12
+                a3b = b1 / a12 - b2 / a22
 
-            z1 = a6 * y1 + a7
-            # z2 = a6 * y2 + a7
+                a4b = a2b / a1b  # x = a4b * z + a5b
+                a5b = a3b / a1b
+                a6b = (-a21 * a4b - a23) / a22  # y = a6b * z + a7b
+                a7b = (b2 - a21 * a5b) / a22
 
-            if z1 < 0:
-                y = y1
+                a = a4b ** 2 + a6b ** 2 + 1
+                b = 2 * a4b * (a5b - x1) + 2 * a6b * (a7b - y1) - 2 * z1
+                c = a5b * (a5b - 2 * x1) + a7b * (a7b - 2 * y1) + x12 + y12 + z12 - r12
+
+                if b ** 2 - 4 * a * c < 0:
+                    print("Provided angles are not correct. Check for Joint angle sensing error.")
+                    raise TypeError
+
+                z_sqrt = sqrt(b ** 2 - (4 * a * c))
+                z_a = (-b + z_sqrt) / (2 * a)
+                z_b = (-b - z_sqrt) / (2 * a)
+
+                # z_a/z_b are candidate point z-coordinates directly (unlike
+                # the y-branch below, no extra substitution is needed).
+                z = z_a if z_a < 0 else z_b
+
+                point = [a4b * z + a5b + self.TCP[0], a6b * z + a7b + self.TCP[1], z + self.TCP[2]]
+
             else:
-                y = y2
-            point = [a4 * y + a5 + self.TCP[0], y + self.TCP[1], a6 * y + a7 + self.TCP[2]]
+                a4 = a2 / a1
+                a5 = a3 / a1
+                a6 = (-a21 * a4 - a22) / a23
+                a7 = (b2 - a21 * a5) / a23
+
+                # Third substitutions
+                a = a4 ** 2 + a6 ** 2 + 1
+                b = 2 * a4 * (a5 - x1) + 2 * a6 * (a7 - z1) - 2 * y1
+                c = a5 * (a5 - 2 * x1) + a7 * (a7 - 2 * z1) + x12 + y12 + z12 - r12
+
+                if b ** 2 - 4 * a * c < 0:
+                    print("Provided angles are not correct. Check for Joint angle sensing error.")
+                    raise TypeError
+
+                y_sqrt = sqrt(b ** 2 - (4 * a * c))
+                y1 = (-b + y_sqrt) / (2 * a)  # positive y coordinate
+                y2 = (-b - y_sqrt) / (2 * a)
+
+                z1 = a6 * y1 + a7
+                # z2 = a6 * y2 + a7
+
+                if z1 < 0:
+                    y = y1
+                else:
+                    y = y2
+                point = [a4 * y + a5 + self.TCP[0], y + self.TCP[1], a6 * y + a7 + self.TCP[2]]
 
         return point
 
