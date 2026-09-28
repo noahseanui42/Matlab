@@ -111,6 +111,31 @@ some margin to spare — otherwise, treat −550..−793mm as the real scan
 volume for this build. `tests/test_kinematics.py`'s regression values and
 grid are scoped to this range.
 
+### Pen-holder end effector (positioning accuracy test)
+
+For bench testing positioning accuracy without the coil, the magnetometer
+probe is swapped for a 3D-printed pen holder that clamps a whiteboard
+marker, so a scan can mark each commanded point on a sheet of paper and the
+marks can be measured against the intended grid.
+
+- The holder's clamp bore is deliberately oversized for the marker
+  currently on hand, so a second printed adapter/insert can take up the
+  slack if the marker is swapped later — the bore itself doesn't need to
+  change between pens.
+- **TCP offset not yet updated for this tool.** `TCP_DEFAULT = (0, 0, −21)`
+  mm in `delta_app/robot_config.py` (HANDOFF §4 Q4, above) is the probe's
+  tip offset below the effector's ball-joint-axis centre, not the pen's.
+  The pen holder almost certainly has a different tip offset, and using the
+  probe's TCP with the pen will shift every marked point on the paper by
+  the difference between the two. Before trusting the marking test's
+  results, measure the pen holder's own offset (ball-joint-axis centre down
+  to the marker tip, with the marker seated as it will be for the test) and
+  either swap in a pen-specific TCP constant or update `TCP_DEFAULT` for
+  the duration of the test.
+- Since this runs on the bench outside the coil, the pen holder isn't bound
+  by the project's non-magnetic-material rule for parts used inside the
+  coil — normal fasteners are fine here.
+
 ## Serial protocol (must match the GUI byte-for-byte)
 
 Every token is wrapped in `<` and `>`; a one-character **mode** token is
