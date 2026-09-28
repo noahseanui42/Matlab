@@ -32,3 +32,9 @@ ELBOW_JOINT_WIDTH = 35.0  # user's actual parallelogram rod spacing, confirmed (
 
 SERIAL_PORT_DEFAULT = "/dev/cu.usbmodem14101"  # confirmed during bring-up on the GUI Mac
 SERIAL_DTR = True               # confirmed needed during bring-up: no stream arrived at False
+
+# Set True to log calculateFPK()'s internal singularity-fallback branches
+# (e.g. "singularities") on every hit. These fire on ordinary, expected
+# geometry (e.g. once per poll near the home position) so they're off by
+# default -- they'd otherwise spam stdout and bury real errors in the log.
+DEBUG_KINEMATICS = False

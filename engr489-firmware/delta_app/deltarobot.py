@@ -172,7 +172,8 @@ class DeltaRobot():
 
         # Check for singularities a13 = 0 and a23 = 0
         if a13 == 0 and a23 == 0:
-            print("singularities")
+            if robot_config.DEBUG_KINEMATICS:
+                print("singularities")
             # substitutions for x and y coordinates
             a = 2 * (x3 - x1)
             b = 2 * (y3 - y1)
