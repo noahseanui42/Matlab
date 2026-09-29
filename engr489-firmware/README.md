@@ -146,12 +146,11 @@ These were confirmed with the user before implementation:
    | Arm | Pin | centre_us | us_per_deg | dir | min_deg | max_deg |
    |---|---|---|---|---|---|---|
    | 1 | D9 | 1460 | 11.8231 | +1 | −20.0 | 70.0 |
-   | 2 | D10 | 1350\* | 9.16\* | +1 | −20.0 | 70.0 |
+   | 2 | D10 | 1350\* | 9.51\* | +1 | −20.0 | 70.0 |
    | 3 | D11 | 1410 | 10.5544 | +1 | −20.0 | 70.0 |
 
-   \* Arm 2 re-swept 2026-09-29 (was 1385 / 10.0481). The slope is
-   provisional until the shaft-to-corner distance used in the conversion
-   is measured — see `delta_servo/config.h`.
+   \* Arm 2 re-swept 2026-09-29 with the ruler method (was 1385 / 10.0481);
+   data and conversion in `tools/servo_sweep/servo2_angles.xlsx`.
 
    `centre_us`/`us_per_deg`/`dir` are still per-arm (from the single-arm
    pass — that part of the measurement isn't affected by plate sag); only

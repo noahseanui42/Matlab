@@ -33,14 +33,14 @@ constexpr float L_LO = 625.0f;   // forearm (HANDOFF §4 Q2: confirmed 625 mm)
 struct ServoCal { uint8_t pin; float centre_us; float us_per_deg; int8_t dir; float min_deg; float max_deg; };
 constexpr ServoCal CAL[3] = {
   { 9, 1460.0f, 11.8231f, +1, -20.0f, 70.0f},  // arm1 (trim_us=-60)
-  {10, 1350.0f,  9.16f,   +1, -20.0f, 70.0f},  // arm2 (trim_us=-170) re-swept 2026-09-29, see below
+  {10, 1350.0f,  9.51f,   +1, -20.0f, 70.0f},  // arm2 (trim_us=-170) re-swept 2026-09-29, see below
   {11, 1410.0f, 10.5544f, +1, -20.0f, 70.0f},  // arm3 (trim_us=-110)
 };
 // Arm 2 (D10) was re-swept 2026-09-29 (tools/servo_sweep/servo2_angles.xlsx):
-// flat at ~1350us (was 1385) and 9.16 us/deg (was 10.0481) from a 1200-1950us
-// straight-line fit. The slope assumes R = 18cm shaft-to-measured-corner --
-// not yet measured -- so treat it as provisional; the centre shift is not
-// sensitive to R. Previous values: {10, 1385.0f, 10.0481f, ...}.
+// flat at ~1350us (was 1385) and 9.51 us/deg (was 10.0481) from a 1200-1950us
+// straight-line fit (worst point 1.4 deg off the line), using the measured
+// 18.5cm shaft-to-corner distance. The sweep only reached ~63 deg at 1950us,
+// so 63-70 deg (up to 2016us) is extrapolated. Previous: {10, 1385.0f, 10.0481f, ...}.
 constexpr int   US_MIN = 830, US_MAX = 2170;
 
 // Motion
