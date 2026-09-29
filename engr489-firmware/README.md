@@ -55,7 +55,10 @@ touch `Servo`, `Serial` or `millis()`.
 These were confirmed with the user before implementation:
 
 1. **Geometry convention:** `SB`/`SP` are equilateral-triangle **side**
-   lengths through the joint centres (not centre-to-axis radii).
+   lengths through the joint centres (not centre-to-axis radii). `SB` = 175 mm
+   (bicep pivots, 50.5 mm inradius, measured); `SP` = **75 mm**, the inner
+   triangle through the forearm ball joints on the 150 mm platform (43.3 mm
+   circumradius), not the 150 mm outline.
 2. **Forearm length:** **625 mm** (not the 600/700 mm the planning doc had
    flagged as unresolved).
 3. **Servo-to-arm mapping:** D9 = arm 1 (on the −y axis), D10 = arm 2,
@@ -99,7 +102,7 @@ These were confirmed with the user before implementation:
 With the corrected full-assembly limits (−20° to 70°), the reachable
 envelope is **much closer to the project's z ≈ −450 to −750 mm scan
 target** than either earlier estimate. On-axis (x=y=0), the workspace now
-spans roughly **z≈−550mm to z≈−793mm** — covering the entire deep half of
+spans roughly **z≈−540mm to z≈−788mm** — covering the entire deep half of
 the target range and then some, though still about 100mm short at the
 shallow end (−450 to −550mm remains unreachable; θ=−20° bottoms out around
 z=−550mm). Off-axis, a broad grid (x,y∈[−150,150]mm, z∈[−790,−550]mm, 25mm
@@ -107,7 +110,7 @@ steps) has ~89% of points reachable (1501/1690).
 
 If the shallow 100mm matters for the coil measurement plan, it's worth
 re-probing whether −20° really is the safe floor or was itself set with
-some margin to spare — otherwise, treat −550..−793mm as the real scan
+some margin to spare — otherwise, treat −540..−788mm as the real scan
 volume for this build. `tests/test_kinematics.py`'s regression values and
 grid are scoped to this range.
 

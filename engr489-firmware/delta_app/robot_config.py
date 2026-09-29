@@ -9,8 +9,10 @@ tests/test_config_sync.py, which enforces this.
 # Geometry (mm). SB/SP are equilateral-triangle SIDE lengths through the
 # joint centres (HANDOFF §4 Q1: confirmed as side lengths).
 SB = 175.0
-SP = 150.0
-L_UP = 180.0   # bicep, pivot to pivot
+# SP is the triangle through the forearm BALL-JOINT centres: the 75 mm inner
+# triangle of the 150 mm platform (circumradius 43.3 mm), NOT the 150 mm outline.
+SP = 75.0
+L_UP = 177.0   # bicep, pivot to pivot
 L_LO = 625.0   # forearm, pivot to pivot (HANDOFF §4 Q2: confirmed 625 mm)
 
 # Per-arm joint angle limits, degrees. index = arm number - 1.

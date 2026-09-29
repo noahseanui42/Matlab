@@ -1,12 +1,12 @@
 """Python-side kinematics tests (HANDOFF §9.1).
 
 Regression values below are computed for THIS robot's actual configured
-geometry (SB=175, SP=150 as triangle side lengths, L_UP=180, L_LO=625 mm,
+geometry (SB=175, SP=75 as triangle side lengths, L_UP=177, L_LO=625 mm,
 HANDOFF §4 answers) -- not the handoff's illustrative L_LO=600 example --
 and its real calibrated per-arm angle limits: -20/70 deg on all three arms,
 confirmed with the full 3-arm assembly jogged together (the single-arm
 measurement that preceded it was falsely tight -- see README). This gives
-an on-axis reachable z range of roughly -550..-793mm.
+an on-axis reachable z range of roughly -540..-788mm.
 """
 import math
 import os
@@ -34,7 +34,7 @@ def make_robot():
 
 def test_zhome_on_axis_regression():
     d = make_robot()
-    d.calculateIPK((0, 0, -608.2049800218946))
+    d.calculateIPK((0, 0, -597.2345784744069))
     for theta in d.fi:
         assert abs(math.degrees(theta)) < 0.01
 
@@ -43,12 +43,12 @@ def test_ik_on_axis_regression():
     # z -> expected joint angle (deg), all three arms equal by symmetry.
     # Within the real calibrated -20/70 deg limits.
     expected = {
-        -560: -16.070127,
-        -600: -2.626863,
-        -650: 13.071569,
-        -700: 28.877895,
-        -750: 46.755257,
-        -790: 67.179726,
+        -560: -12.572069,
+        -600: 0.89307,
+        -650: 16.59158,
+        -700: 32.43681,
+        -750: 50.504961,
+        -770: 59.536649,
     }
     d = make_robot()
     for z, exp_deg in expected.items():

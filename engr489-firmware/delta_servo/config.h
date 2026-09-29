@@ -11,8 +11,10 @@
 
 // Geometry (mm). sb/sp = equilateral triangle SIDE lengths (see HANDOFF §4 Q1)
 constexpr float SB = 175.0f;
-constexpr float SP = 150.0f;
-constexpr float L_UP = 180.0f;   // bicep
+// SP = triangle through the forearm ball-joint centres: the 75 mm inner triangle
+// of the 150 mm platform (circumradius 43.3 mm), NOT the 150 mm outline.
+constexpr float SP = 75.0f;
+constexpr float L_UP = 177.0f;   // bicep
 constexpr float L_LO = 625.0f;   // forearm (HANDOFF §4 Q2: confirmed 625 mm)
 
 // Per-servo calibration. index = arm number - 1. arm 1 on -y axis; arms 1->2->3 CCW viewed from above.
