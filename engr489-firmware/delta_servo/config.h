@@ -38,6 +38,20 @@ constexpr ServoCal CAL[3] = {
 };
 constexpr int   US_MIN = 830, US_MAX = 2170;
 
+// Which physical arm (CAL[]/thetaDeg[] index, i.e. Arduino pin above) sits
+// at each geometric position the IK model in kinematics.cpp assumes: index 0
+// is the model's "-y axis" arm, 1 is +120 deg CCW from it, 2 is +240 deg CCW.
+// Confirmed during the pen-holder bench test (README's "Pen-holder end
+// effector" section): physical Arm 3 (D11) is the one actually sitting at
+// the model's assumed -y position, not physical Arm 1 (D9) -- the base
+// plate's extra mounting-hole options meant the arms got bolted on walked
+// 120 deg around from the assumed layout. Calibration (CAL[] above) is
+// unaffected: it's measured per physical servo and stays indexed by pin
+// regardless of which geometric role that servo plays.
+// Keep in sync with delta_app/robot_config.py's GEOM_TO_PHYS
+// (tests/test_config_sync.py enforces this).
+constexpr int GEOM_TO_PHYS[3] = {2, 0, 1};
+
 // Motion
 constexpr uint32_t TICK_MS = 20;          // servo frame & planner tick
 constexpr uint32_t STREAM_MS = 20;

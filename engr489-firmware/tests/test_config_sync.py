@@ -72,3 +72,14 @@ def test_pin_mapping_matches_handoff_default():
     text = _read_config_h()
     cal = _cal_entries(text)
     assert [c["pin"] for c in cal] == [9, 10, 11]
+
+
+def _geom_to_phys(text):
+    m = re.search(r"constexpr int GEOM_TO_PHYS\[3\]\s*=\s*\{([^}]*)\};", text)
+    assert m, "GEOM_TO_PHYS not found in config.h"
+    return [int(v.strip()) for v in m.group(1).split(",")]
+
+
+def test_geom_to_phys_matches():
+    text = _read_config_h()
+    assert _geom_to_phys(text) == robot_config.GEOM_TO_PHYS

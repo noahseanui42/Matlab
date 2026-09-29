@@ -23,6 +23,18 @@ L_LO = 625.0   # forearm, pivot to pivot (HANDOFF §4 Q2: confirmed 625 mm)
 # tests/test_config_sync.py).
 ANGLE_LIMITS_DEG = [(-20.0, 70.0), (-20.0, 70.0), (-20.0, 70.0)]
 
+# Which physical arm (index into ANGLE_LIMITS_DEG / CAL, i.e. servo pin) sits
+# at each geometric position deltarobot.py's IK/FK assume: index 0 is the
+# model's "-y axis" arm, 1 is +120 deg CCW from it, 2 is +240 deg CCW.
+# Confirmed during the pen-holder bench test (engr489-firmware/README.md's
+# "Pen-holder end effector" section): physical Arm 3 (D11) is the one
+# actually sitting at the model's assumed -y position, not physical Arm 1
+# (D9). Angle limits above are unaffected: they're measured per physical
+# servo and stay indexed by pin regardless of which geometric role that
+# servo plays. Must equal delta_servo/config.h's GEOM_TO_PHYS exactly
+# (enforced by tests/test_config_sync.py).
+GEOM_TO_PHYS = [2, 0, 1]
+
 Z_MAX = -300.0          # upper z guard (TCP point), replaces upstream's hard-coded -70
 Z_LIMIT_DEFAULT = -800.0
 TCP_DEFAULT = (0.0, 0.0, -21.0)  # HANDOFF §4 Q6: TCP centred, 21 mm below the effector's ball-joint axis

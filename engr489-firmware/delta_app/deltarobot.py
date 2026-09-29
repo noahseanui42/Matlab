@@ -85,19 +85,24 @@ class DeltaRobot():
         # constants used to calculate Inverse Kinematics
         Ei, Fi, Gi = self.calculateConstants((x, y, z))
 
+        # Ei/Fi/Gi are indexed by geometric slot (0 = -y axis, 1 = +120 deg
+        # CCW, 2 = +240 deg CCW); robot_config.GEOM_TO_PHYS maps each slot to
+        # the physical arm (self.fi / ANGLE_LIMITS_RAD index) that actually
+        # sits there -- see robot_config.py.
         # try to calculate the joint angles, if they are out of limits, throw an OutOfRangeError
         try:
-            for i in range(0, 3):
-                lo, hi = ANGLE_LIMITS_RAD[i]
-                checkForRealSolutions((Ei, Fi, Gi), index=i)
-                feg_sqrt = sqrt(Fi[i] ** 2 + Ei[i] ** 2 - Gi[i] ** 2)
-                temp = 2 * atan((-Fi[i] + feg_sqrt) / (Gi[i] - Ei[i]))
+            for g in range(0, 3):
+                phys = robot_config.GEOM_TO_PHYS[g]
+                lo, hi = ANGLE_LIMITS_RAD[phys]
+                checkForRealSolutions((Ei, Fi, Gi), index=g)
+                feg_sqrt = sqrt(Fi[g] ** 2 + Ei[g] ** 2 - Gi[g] ** 2)
+                temp = 2 * atan((-Fi[g] + feg_sqrt) / (Gi[g] - Ei[g]))
                 if lo <= temp <= hi:
-                    self.fi[i] = temp
+                    self.fi[phys] = temp
                 else:
-                    temp = 2 * atan((-Fi[i] - feg_sqrt) / (Gi[i] - Ei[i]))
+                    temp = 2 * atan((-Fi[g] - feg_sqrt) / (Gi[g] - Ei[g]))
                     if lo <= temp <= hi:
-                        self.fi[i] = temp
+                        self.fi[phys] = temp
                     else:
                         print("The coordinates are out of range!")
                         raise TypeError
@@ -119,9 +124,14 @@ class DeltaRobot():
         L = self.Length
         # Convert degrees to radians
         if not radians:
-            fi1, fi2, fi3 = degToRadians(fi)
-        else:
-            fi1, fi2, fi3 = fi
+            fi = degToRadians(fi)
+        # fi is indexed by physical arm (self.fi / ANGLE_LIMITS_RAD order);
+        # fi1/fi2/fi3 below must be the geometric-slot angles (0 = -y axis,
+        # 1 = +120 deg CCW, 2 = +240 deg CCW), so reindex through
+        # robot_config.GEOM_TO_PHYS -- see robot_config.py.
+        fi1 = fi[robot_config.GEOM_TO_PHYS[0]]
+        fi2 = fi[robot_config.GEOM_TO_PHYS[1]]
+        fi3 = fi[robot_config.GEOM_TO_PHYS[2]]
         # Calculate xi, yi, zi based on fi1, fi2, fi3
         x1 = 0
         y1 = -self.wb - L * cos(fi1) + self.up

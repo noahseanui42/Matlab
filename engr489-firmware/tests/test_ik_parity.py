@@ -18,6 +18,13 @@ IK_CLI = os.path.join(TESTS_DIR, "ik_cli")
 
 sys.path.insert(0, os.path.join(TESTS_DIR, "..", "delta_app"))
 import deltarobot  # noqa: E402
+import robot_config  # noqa: E402
+
+# Ei/Fi/Gi (from calculateConstants) are indexed by geometric slot; cpp_theta
+# and py_theta below are indexed by physical arm. This inverts
+# robot_config.GEOM_TO_PHYS to look up the right slot for a given physical
+# arm when checking the singularity-skip condition.
+GEOM_OF_PHYS = {phys: g for g, phys in enumerate(robot_config.GEOM_TO_PHYS)}
 
 
 def build_ik_cli():
@@ -77,8 +84,9 @@ def test_ik_parity_over_grid():
                 # is a property of the shared formula, not a porting bug, so
                 # skip the strict check there rather than mask it with a
                 # tolerance loose enough to hide a real mismatch elsewhere.
-                denom_scale = max(abs(Ei[i]), abs(Gi[i]), 1.0)
-                if abs(Gi[i] - Ei[i]) / denom_scale < 1e-3:
+                g = GEOM_OF_PHYS[i]
+                denom_scale = max(abs(Ei[g]), abs(Gi[g]), 1.0)
+                if abs(Gi[g] - Ei[g]) / denom_scale < 1e-3:
                     continue
                 max_delta = max(max_delta, abs(c - p))
                 # kinematics.cpp uses float32, deltarobot.py float64; 0.02 deg
