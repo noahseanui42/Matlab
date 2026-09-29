@@ -75,16 +75,20 @@ bool ik(const float xyz[3], float thetaDeg[3]) {
     sq(x) + sq(y) + sq(z) + sq(b) + sq(c) + L2 - 2.0f * x * b + 2.0f * y * c - l2,
   };
 
+  // E/F/G above are indexed by geometric slot (0 = -y axis, 1 = +120 deg
+  // CCW, 2 = +240 deg CCW); GEOM_TO_PHYS maps each slot to the physical
+  // arm/CAL[]/thetaDeg[] index that actually sits there (see config.h).
   float result[3];
-  for (int i = 0; i < 3; i++) {
-    if (!solveArm(E[i], F[i], G[i], CAL[i].min_deg, CAL[i].max_deg, result[i])) {
+  for (int g = 0; g < 3; g++) {
+    int phys = GEOM_TO_PHYS[g];
+    if (!solveArm(E[g], F[g], G[g], CAL[phys].min_deg, CAL[phys].max_deg, result[g])) {
       return false;  // no partial writes to thetaDeg on failure
     }
   }
 
-  thetaDeg[0] = result[0];
-  thetaDeg[1] = result[1];
-  thetaDeg[2] = result[2];
+  for (int g = 0; g < 3; g++) {
+    thetaDeg[GEOM_TO_PHYS[g]] = result[g];
+  }
   return true;
 }
 

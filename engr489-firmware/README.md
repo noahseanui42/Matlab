@@ -135,6 +135,29 @@ marks can be measured against the intended grid.
 - Since this runs on the bench outside the coil, the pen holder isn't bound
   by the project's non-magnetic-material rule for parts used inside the
   coil — normal fasteners are fine here.
+- **Base plate orientation found rotated 120° from the IK model's
+  assumption.** Running the 9-point marking test with the reference paper
+  edge aligned to physical Arm 1 produced marks rotated a clean 120° from
+  their targets (arms are 120° apart, so this is a discrete mismatch, not a
+  calibration drift) — physical Arm 3 (D11) turned out to be the one
+  actually sitting at the position `kinematics.cpp`'s closed-form IK calls
+  "-y axis" (index 0), not physical Arm 1 (D9). The base plate's extra
+  mounting-hole options (built in for flexibility, same reasoning as the
+  pen holder's oversized bore above) meant the arms were bolted on walked
+  120° around from the layout `ik()`'s formulas assume.
+
+  Fixed in software rather than by re-bolting the plate or re-wiring pins:
+  `delta_servo/config.h` and `delta_app/robot_config.py` each define
+  `GEOM_TO_PHYS = [2, 0, 1]`, mapping IK's geometric slot 0/1/2 (-y axis,
+  +120°, +240°) to the physical arm/pin that's actually there. `ik()`
+  (`kinematics.cpp`) and the GUI's `calculateIPK`/`calculateFPK`
+  (`deltarobot.py`) all apply this mapping consistently, so a physical
+  servo's calibration (`CAL[]`/`ANGLE_LIMITS_DEG`, measured per unit) stays
+  indexed by its own pin regardless of which geometric role it plays — only
+  the geometry-to-pin correspondence changed, nothing was recalibrated.
+  `tests/test_config_sync.py` enforces the two `GEOM_TO_PHYS` arrays staying
+  identical. If the base plate is ever physically re-bolted to match the
+  model's original assumption, this should revert to `[0, 1, 2]`.
 
 ## Serial protocol (must match the GUI byte-for-byte)
 
