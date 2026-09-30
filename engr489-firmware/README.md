@@ -290,6 +290,31 @@ disable→enable cycle snaps back to whatever was last commanded (not to
 flat), because θ/xyz were never touched while disabled. Both behaviours
 described in HANDOFF §6.4 fall out of this one rule.
 
+## Upward final approach (backlash)
+
+The 2026-09-30 protractor sweeps (`tools/servo_sweep/CALIBRATION_LOG.md`)
+showed each servo lands about 1.3° differently depending on whether the
+bicep last moved down or up, and servo 2 up to about 4.5°. When the last
+motion lifts the bicep, all three track within about 0.5°. So the firmware
+makes every move end going up:
+
+- If any bicep would finish the move going **down** (θ increasing by more
+  than `APPROACH_TRIGGER_DEG`), the move first goes to the target's x/y at
+  `APPROACH_DZ_MM` (20 mm) **below** it, then rises straight up into it.
+  This covers sideways moves too, since those usually lower at least one bicep.
+- Both legs are one move. `mv` stays 1, and a program point's dwell, a
+  queued manual move or a Stop all wait until the rise has finished.
+- The dip never goes below `APPROACH_Z_FLOOR_MM` (the GUI's −800 mm probe
+  limit, as a platform-centre z). Near the floor the dip is shortened. The
+  move goes direct if there's no room, if the dip point is unreachable, or
+  if rising wouldn't lift every bicep.
+- Cost: every such move travels about 40 mm further: roughly 4 s extra
+  at 10 mm/s (v=2), 8 s at 5 mm/s. Jogging down by 5 mm dips 25 mm and comes back up.
+- Set `APPROACH_DZ_MM = 0` in `config.h` to turn it off.
+
+The GUI's 3D plot shows the dip, because it draws the angles the firmware
+streams back.
+
 ## macOS bring-up fixes found during testing
 
 None of these were anticipated in the original plan — found live while
@@ -382,9 +407,11 @@ python3 -m pytest tests/ -v
 Covers (HANDOFF §9): Python kinematics (FK/IK round trip + on-axis
 regression), C++↔Python IK parity (via `tests/ik_cli`), the protocol frame
 parser (10 cases incl. numeric-string coercion, oversized-frame handling,
-the 1000ms `rxBusy` timeout), the motion planner/program runner (11 cases
+the 1000ms `rxBusy` timeout), the motion planner/program runner (17 cases
 incl. smoothstep, the T-duration formula, pending-slot "newest wins",
-dwell, stop, and the µs-clamp), and config.h/robot_config.py sync.
+dwell, stop, the µs-clamp, and the upward final approach: dip and rise,
+sideways moves, direct upward moves, the floor clamp, dwell after the rise,
+disable mid-dip), and config.h/robot_config.py sync.
 
 Two notable, documented findings from writing these tests (not bugs
 introduced by this port):

@@ -69,3 +69,16 @@ constexpr float MAX_JOINT_DPS = 90.0f;    // cap on average joint speed
 constexpr uint32_t T_MIN_MS = 200;
 constexpr int   MAX_POINTS = 50;          // matches GUI MAX_PROGRAM_LENGTH
 constexpr bool  LOOP_PROGRAM = false;     // upstream loops forever; scans run once
+
+// Upward final approach (backlash). The 2026-09-30 protractor sweeps showed
+// every servo lands ~1.3 deg differently moving down vs up, and servo 2 up to
+// ~4.5 deg, but all three track within ~0.5 deg when the last motion lifts the
+// bicep. So a move that would finish with any bicep moving DOWN (theta
+// increasing by more than APPROACH_TRIGGER_DEG) first goes APPROACH_DZ_MM
+// below the target, then rises straight up into it. 0 disables.
+constexpr float APPROACH_DZ_MM = 20.0f;         // ~6 deg of bicep travel: > servo 2's slack
+constexpr float APPROACH_TRIGGER_DEG = 0.1f;
+// Never dip the platform centre below this. = robot_config.Z_LIMIT_DEFAULT
+// (-800, probe tip) minus TCP_DEFAULT z (-21), since the firmware has no TCP
+// (enforced by tests/test_config_sync.py). The dip is shortened to stay above it.
+constexpr float APPROACH_Z_FLOOR_MM = -779.0f;

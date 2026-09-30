@@ -63,6 +63,7 @@ uint32_t expectedDurationMs(const float xyz0[3], const float xyz1[3], const floa
 void test_smoothstep_and_joint_mode_sync() {
   Motion m;
   m.enable(0);
+  m.setApproachEnabled(false);  // base planner; approach tested separately
   float theta0[3] = {m.theta()[0], m.theta()[1], m.theta()[2]};
   float xyz0[3] = {m.xyz()[0], m.xyz()[1], m.xyz()[2]};
 
@@ -100,6 +101,7 @@ void test_smoothstep_and_joint_mode_sync() {
 void test_t_formula_v_default() {
   Motion m;
   m.enable(0);
+  m.setApproachEnabled(false);  // base planner; approach tested separately
   float xyz0[3] = {m.xyz()[0], m.xyz()[1], m.xyz()[2]};
   float theta0[3] = {m.theta()[0], m.theta()[1], m.theta()[2]};
   float target[3] = {0, 0, -650};
@@ -134,6 +136,7 @@ void test_t_min_floor() {
 void test_linear_mode_intermediate_on_segment() {
   Motion m;
   m.enable(0);
+  m.setApproachEnabled(false);  // base planner; approach tested separately
   float xyz0[3] = {m.xyz()[0], m.xyz()[1], m.xyz()[2]};
   float target[3] = {50, -30, -600};
 
@@ -160,6 +163,7 @@ void test_linear_mode_intermediate_on_segment() {
 void test_linear_mode_unreachable_sets_e2_and_holds() {
   Motion m;
   m.enable(0);
+  m.setApproachEnabled(false);  // base planner; approach tested separately
   // Re-derived for the real calibrated CAL limits (-20/70 deg, confirmed
   // with the full 3-arm assembly). These points are lateral extremes just
   // to exercise the IK-failure code path; they don't need to be a
@@ -210,6 +214,7 @@ void test_linear_mode_unreachable_sets_e2_and_holds() {
 void test_pending_slot_newest_wins() {
   Motion m;
   m.enable(0);
+  m.setApproachEnabled(false);  // base planner; approach tested separately
   float t1[3] = {0, 0, -650};
   float t2[3] = {30, 0, -650};
   float t3[3] = {-30, 0, -650};
@@ -235,6 +240,7 @@ void test_pending_slot_newest_wins() {
 void test_program_runs_once_with_dwell() {
   Motion m;
   m.enable(0);
+  m.setApproachEnabled(false);  // base planner; approach tested separately
   float p0[3] = {0, 0, -650};
   float p1[3] = {30, 0, -650};
 
@@ -267,6 +273,7 @@ void test_program_runs_once_with_dwell() {
 void test_stop_finishes_current_segment() {
   Motion m;
   m.enable(0);
+  m.setApproachEnabled(false);  // base planner; approach tested separately
   float p0[3] = {0, 0, -650};
   float p1[3] = {40, 0, -650};
 
@@ -338,6 +345,156 @@ void test_us_clamp_sets_e5() {
   CHECK(!clamped);  // config.h's actual placeholder calibration stays in range at 0 deg
 }
 
+
+// Ticks until IDLE (or timeout), tracking the lowest z and whether the move
+// ever went IDLE in between (it mustn't: dip + rise are one move).
+struct RunResult {
+  float minZ = 1e9f;
+  uint32_t tEnd = 0;
+  bool finished = false;
+  bool thetaRoseAfterMin = false;  // any bicep moved DOWN after the lowest point
+};
+
+RunResult runToIdle(Motion &m, uint32_t t0) {
+  RunResult r;
+  bool pastMin = false;
+  float prev[3] = {m.theta()[0], m.theta()[1], m.theta()[2]};
+  for (uint32_t t = t0; t <= t0 + 60000; t += (uint32_t)TICK_MS) {
+    m.tick(t);
+    if (m.xyz()[2] < r.minZ - 1e-4f) {
+      r.minZ = m.xyz()[2];
+    } else if (m.xyz()[2] > r.minZ + 0.5f) {
+      pastMin = true;
+    }
+    for (int i = 0; i < 3; i++) {
+      if (pastMin && m.theta()[i] > prev[i] + 1e-3f) r.thetaRoseAfterMin = true;
+      prev[i] = m.theta()[i];
+    }
+    if (m.state() == MotionState::IDLE) {
+      r.finished = true;
+      r.tEnd = t;
+      break;
+    }
+  }
+  return r;
+}
+
+void test_downward_move_dips_then_rises() {
+  Motion m;
+  m.enable(0);
+  float target[3] = {0, 0, -650};  // below home (zHome(0) ~ -597): every bicep moves down
+  float theta1[3];
+  CHECK(ik(target, theta1));
+
+  m.acceptManualMove(makeMove(0, 0, 5, 5, target[0], target[1], target[2]), 0);
+  CHECK(m.state() == MotionState::MOVING);
+  CHECK(m.isApproaching());
+
+  RunResult r = runToIdle(m, 0);
+  CHECK(r.finished);
+  CHECK(!m.isApproaching());
+  CHECK_NEAR(r.minZ, target[2] - APPROACH_DZ_MM, 0.01);
+  CHECK(!r.thetaRoseAfterMin);  // the final leg only ever lifts the biceps
+  CHECK(m.error() == 0);
+  for (int i = 0; i < 3; i++) {
+    CHECK_NEAR(m.xyz()[i], target[i], 1e-3);
+    CHECK_NEAR(m.theta()[i], theta1[i], 1e-3);
+  }
+}
+
+void test_sideways_move_with_a_bicep_going_down_dips() {
+  Motion m;
+  m.enable(0);
+  m.setApproachEnabled(false);
+  float start[3] = {0, 0, -650};
+  m.acceptManualMove(makeMove(0, 0, 5, 5, start[0], start[1], start[2]), 0);
+  RunResult r0 = runToIdle(m, 0);
+  CHECK(r0.finished);
+
+  // Same z, moved sideways: some biceps go down, some up.
+  m.setApproachEnabled(true);
+  float target[3] = {40, 0, -650};
+  m.acceptManualMove(makeMove(0, 0, 5, 5, target[0], target[1], target[2]), r0.tEnd);
+  CHECK(m.isApproaching());
+  RunResult r = runToIdle(m, r0.tEnd);
+  CHECK(r.finished);
+  CHECK_NEAR(r.minZ, target[2] - APPROACH_DZ_MM, 0.01);
+  CHECK_NEAR(m.xyz()[0], target[0], 1e-3);
+  CHECK_NEAR(m.xyz()[2], target[2], 1e-3);
+}
+
+void test_upward_move_goes_direct() {
+  Motion m;
+  m.enable(0);
+  m.setApproachEnabled(false);
+  float low[3] = {0, 0, -700};
+  m.acceptManualMove(makeMove(0, 0, 5, 5, low[0], low[1], low[2]), 0);
+  RunResult r0 = runToIdle(m, 0);
+  CHECK(r0.finished);
+
+  m.setApproachEnabled(true);
+  float xyz0[3] = {m.xyz()[0], m.xyz()[1], m.xyz()[2]};
+  float theta0[3] = {m.theta()[0], m.theta()[1], m.theta()[2]};
+  float target[3] = {0, 0, -650};
+  float theta1[3];
+  CHECK(ik(target, theta1));
+  m.acceptManualMove(makeMove(0, 0, 5, 5, target[0], target[1], target[2]), r0.tEnd);
+  CHECK(!m.isApproaching());
+  RunResult r = runToIdle(m, r0.tEnd);
+  CHECK(r.finished);
+  CHECK(r.minZ >= low[2] - 1e-3f);  // never went below where it started
+  CHECK(r.tEnd - r0.tEnd <= expectedDurationMs(xyz0, target, theta0, theta1, 5) + TICK_MS);
+  CHECK_NEAR(m.xyz()[2], target[2], 1e-3);
+}
+
+void test_dip_is_clamped_to_floor() {
+  Motion m;
+  m.enable(0);
+  float target[3] = {0, 0, APPROACH_Z_FLOOR_MM + 5.0f};
+  float theta1[3];
+  CHECK(ik(target, theta1));
+  m.acceptManualMove(makeMove(0, 0, 5, 5, target[0], target[1], target[2]), 0);
+  CHECK(m.isApproaching());
+  RunResult r = runToIdle(m, 0);
+  CHECK(r.finished);
+  CHECK_NEAR(r.minZ, APPROACH_Z_FLOOR_MM, 0.01);  // shortened dip, never below the floor
+  CHECK_NEAR(m.xyz()[2], target[2], 1e-3);
+}
+
+void test_program_dwell_starts_after_the_rise() {
+  Motion m;
+  m.enable(0);
+  float p0[3] = {0, 0, -650};
+  m.acceptProgramPoint(makeMove(0, 0, 5, 5, p0[0], p0[1], p0[2]));
+  m.setDwell(0, 500);
+  m.setStart(true, 0);
+  CHECK(m.isApproaching());
+
+  bool sawDwell = false;
+  for (uint32_t t = 0; t < 60000; t += (uint32_t)TICK_MS) {
+    m.tick(t);
+    if (m.state() == MotionState::DWELL && !sawDwell) {
+      sawDwell = true;
+      CHECK_NEAR(m.xyz()[2], p0[2], 1e-3);  // dwelling at the point, not at the dip
+    }
+    if (!m.isRunning() && m.state() == MotionState::IDLE && t > 100) break;
+  }
+  CHECK(sawDwell);
+  CHECK_NEAR(m.xyz()[2], p0[2], 1e-3);
+}
+
+void test_disable_mid_dip_cancels_rise() {
+  Motion m;
+  m.enable(0);
+  m.acceptManualMove(makeMove(0, 0, 5, 5, 0, 0, -650), 0);
+  CHECK(m.isApproaching());
+  m.tick(100);
+  m.disable();
+  CHECK(!m.isApproaching());
+  m.enable(200);
+  m.tick(400);
+  CHECK(m.state() == MotionState::IDLE);  // no leftover rise starts by itself
+}
 }  // namespace
 
 int main() {
@@ -352,6 +509,12 @@ int main() {
   test_move_while_disabled_sets_e3();
   test_manual_move_while_program_running_sets_e3();
   test_us_clamp_sets_e5();
+  test_downward_move_dips_then_rises();
+  test_sideways_move_with_a_bicep_going_down_dips();
+  test_upward_move_goes_direct();
+  test_dip_is_clamped_to_floor();
+  test_program_dwell_starts_after_the_rise();
+  test_disable_mid_dip_cancels_rise();
 
   if (g_failures == 0) {
     printf("ALL PASS\n");
