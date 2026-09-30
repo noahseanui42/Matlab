@@ -50,6 +50,65 @@ engr489-firmware/
 headers) so they're unit-testable on the host; only `delta_servo.ino` may
 touch `Servo`, `Serial` or `millis()`.
 
+## Architecture
+
+```
+┌───────────────────────── Mac (Python, delta_app/) ─────────────────────────┐
+│                                                                            │
+│  main.py ──► deltagui.py (Tkinter GUI)                                     │
+│               • jog / go-to-point / program list / wait times              │
+│               • start, stop, enable, port field                            │
+│               • reads status stream → 3D plot, angle readouts              │
+│                     │                          ▲                           │
+│                     ▼                          │                           │
+│             deltarobot.py  (IK / FPK, workspace checks)                    │
+│                     ▲                                                      │
+│                     │ SB, SP, L_UP, L_LO, ANGLE_LIMITS_DEG, Z_MAX,         │
+│              robot_config.py   TCP_DEFAULT, SERIAL_PORT_DEFAULT, DTR       │
+└─────────────────────┬──────────────────────────▲───────────────────────────┘
+                      │ USB CDC ("115200")       │ status line every 20 ms
+                      │ <mode><{json}><#> frames │ (paused while rxBusy):
+                      │ 2 move, 1 program point, │ {"deg":[..],"mv","run",
+                      │ 3 wait, 0 start, 8 enable│  "en","e"}  + "OK" replies
+┌─────────────────────▼──────────────────────────┴───────────────────────────┐
+│        Arduino UNO R4 Minima  (delta_servo/)                               │
+│                                                                            │
+│  delta_servo.ino  loop():                                                  │
+│    1. drain Serial ──► protocol.cpp (frame parser)                         │
+│                          callbacks: onMove, onProgramPoint, onFunc(wait),  │
+│                          onStart, onEnable, onJsonError                    │
+│                               │                                            │
+│                               ▼                                            │
+│         motion.cpp  start of each move: ik(target) → θ1 (fail → e=1)       │
+│           (manual move: on receipt; program point: when it's reached)      │
+│                                                                            │
+│    2. every TICK_MS (20 ms): motion.tick()                                 │
+│         DISABLED / IDLE → MOVING → DWELL → next program point              │
+│         smoothstep s(u) = 3u² − 2u³                                        │
+│           joint mode:  θ = θ0 + s·(θ1 − θ0)        (no IK per tick)         │
+│           linear mode: p = xyz0 + s·(xyz1 − xyz0) → ik(p) every tick       │
+│                        (IK fails mid-path → stop, e=2)                     │
+│         kinematics.cpp: closed-form IK, CAL[i].min_deg/max_deg limits      │
+│       then writeServos():                                                  │
+│         angleToUs: us = centre_us + dir·us_per_deg·θ                       │
+│                    clamped to US_MIN..US_MAX = 830–2170 µs (hit → e=5)     │
+│         Servo.writeMicroseconds ──► D9 / D10 / D11 (only when enabled)     │
+│                                                                            │
+│    3. every STREAM_MS (20 ms), unless rxBusy: printStatusLine()            │
+│                                                                            │
+│  config.h: SB/SP/L_UP/L_LO, CAL[] per-servo table, US_MIN/MAX, timing,     │
+│            speeds (kept in sync with robot_config.py by test_config_sync)  │
+└────────────────────────────────────────────────────────────────────────────┘
+                      │ PWM pulses
+                      ▼
+        servo 1 (D9)   servo 2 (D10)   servo 3 (D11)
+                      │
+          delta arms → effector plate → probe (TCP 21 mm below)
+```
+
+The firmware works in effector-centre coordinates only; the GUI applies the
+TCP offset before sending a move.
+
 ## Assumptions made (HANDOFF §4 answers)
 
 These were confirmed with the user before implementation:
@@ -90,8 +149,11 @@ These were confirmed with the user before implementation:
    | Arm | Pin | centre_us | us_per_deg | dir | min_deg | max_deg |
    |---|---|---|---|---|---|---|
    | 1 | D9 | 1460 | 11.8231 | +1 | −20.0 | 70.0 |
-   | 2 | D10 | 1385 | 10.0481 | +1 | −20.0 | 70.0 |
+   | 2 | D10 | 1350\* | 9.51\* | +1 | −20.0 | 70.0 |
    | 3 | D11 | 1410 | 10.5544 | +1 | −20.0 | 70.0 |
+
+   \* Arm 2 re-swept 2026-09-29 with the ruler method (was 1385 / 10.0481);
+   data and conversion in `tools/servo_sweep/servo2_angles.xlsx`.
 
    `centre_us`/`us_per_deg`/`dir` are still per-arm (from the single-arm
    pass — that part of the measurement isn't affected by plate sag); only
