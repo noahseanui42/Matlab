@@ -21,8 +21,14 @@ constexpr float L_LO = 625.0f;   // forearm (HANDOFF §4 Q2: confirmed 625 mm)
 // us = centre_us + dir * us_per_deg * theta_deg ; theta > 0 = bicep DOWN
 // Pin mapping (HANDOFF §4 Q3, default confirmed): D9=arm1, D10=arm2, D11=arm3.
 //
-// centre_us/us_per_deg/dir: per-arm, measured with each arm driven
-// individually (rest of the linkage resting flat).
+// centre_us/us_per_deg/dir: per-arm. Refit 2026-09-30 from an ASSEMBLED
+// on-axis sweep (all three arms connected, digital protractor on each bicep,
+// probe z -730 -> -590 in 10 mm steps, approached upward). Fit measured =
+// s * commanded + o per arm, then us_per_deg /= s and centre_us -= o * new
+// us_per_deg. Raw data: tools/servo_sweep/sweep_2026-09-30_up.csv; notes in
+// tools/servo_sweep/CALIBRATION_LOG.md. Values before this refit:
+//   D9 1460 / 11.8231 (first run), D10 1350 / 9.51 (re-swept 2026-09-29),
+//   D11 1410 / 10.5544 (first run).
 //
 // min_deg/max_deg: reconfirmed with the FULL 3-arm assembly (bring-up §10
 // steps 4-5, all three enabled and jogged together) -- the single-arm
@@ -31,18 +37,12 @@ constexpr float L_LO = 625.0f;   // forearm (HANDOFF §4 Q2: confirmed 625 mm)
 // level, creating an early false collision that doesn't happen when all
 // three hold the plate level together. -20/70 deg is described as a safe
 // margin, not the absolute mechanical stop -- there may be more room.
-// centre_us = 1520 + trim_us from the calibration tool's output.
 struct ServoCal { uint8_t pin; float centre_us; float us_per_deg; int8_t dir; float min_deg; float max_deg; };
 constexpr ServoCal CAL[3] = {
-  { 9, 1460.0f, 11.8231f, +1, -20.0f, 70.0f},  // arm1 (trim_us=-60)
-  {10, 1350.0f,  9.51f,   +1, -20.0f, 70.0f},  // arm2 (trim_us=-170) re-swept 2026-09-29, see below
-  {11, 1410.0f, 10.5544f, +1, -20.0f, 70.0f},  // arm3 (trim_us=-110)
+  { 9, 1456.0f, 9.8315f, +1, -20.0f, 70.0f},  // arm1: fit slope 1.203, offset +0.37 deg
+  {10, 1373.0f, 9.7664f, +1, -20.0f, 70.0f},  // arm2: fit slope 0.974, offset -2.38 deg
+  {11, 1393.0f, 9.6658f, +1, -20.0f, 70.0f},  // arm3: fit slope 1.092, offset +1.73 deg
 };
-// Arm 2 (D10) was re-swept 2026-09-29 (tools/servo_sweep/servo2_angles.xlsx):
-// flat at ~1350us (was 1385) and 9.51 us/deg (was 10.0481) from a 1200-1950us
-// straight-line fit (worst point 1.4 deg off the line), using the measured
-// 18.5cm shaft-to-corner distance. The sweep only reached ~63 deg at 1950us,
-// so 63-70 deg (up to 2016us) is extrapolated. Previous: {10, 1385.0f, 10.0481f, ...}.
 constexpr int   US_MIN = 830, US_MAX = 2170;
 
 // Which physical arm (CAL[]/thetaDeg[] index, i.e. Arduino pin above) sits

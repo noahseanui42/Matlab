@@ -59,3 +59,36 @@ Suggested targets:
 If it's still off after this, the next suspects are forearm rod lengths
 (measure all six between ball centres, should match within ~1 mm) and
 servo 2's play.
+
+## 2026-09-30: assembled protractor sweep and refit
+
+- **Method:** all three arms connected, flashed with the confirmed geometry
+  (SB 175 / SP 75 / L_UP 177 / L_LO 625) and D9 1460 / 11.8231, D10 1350 / 9.51,
+  D11 1410 / 10.5544. On-axis, probe z −740 (lead-in) then −730 → −590 in
+  10 mm steps, moving up, no Home in between. Digital protractor on each bicep
+  (positive = down). Raw data: `sweep_2026-09-30_up.csv`. The GUI's commanded
+  angles matched the model exactly, so the geometry/build is as intended.
+- **Before the refit the errors were large:** at −730, D9 +7.2°, D10 −2.4°,
+  D11 +4.9° (measured − commanded), so the arms disagreed by up to ~10° and the
+  platform was tilted, not just at the wrong height (≈3 mm of probe z per
+  degree near the bottom).
+- **Straight-line fit, measured = s × commanded + o** (−740 lead-in excluded,
+  it was approached from the other direction):
+
+  | Pin | s | o (°) | fit residual (max) | new centre_us | new us_per_deg |
+  |---|---|---|---|---|---|
+  | D9  | 1.203 | +0.37 | 1.0° | 1460 → **1456** | 11.8231 → **9.8315** |
+  | D10 | 0.974 | −2.38 | 1.3° | 1350 → **1373** | 9.51 → **9.7664** |
+  | D11 | 1.092 | +1.73 | 0.5° | 1410 → **1393** | 10.5544 → **9.6658** |
+
+  All three now come out at ~9.7–9.8 µs/deg, consistent with each other.
+  D9's first-run 11.8231 was the biggest single error. D11 was moving *too far*
+  (us_per_deg too large), the opposite of what the 09-29 drift note guessed.
+- **Watch:** at −590 (≈ −9°) D9 and D10 read ~2° further up than the trend;
+  D10's scatter is the worst of the three, consistent with its ~5 mm play.
+- **Not measured yet:** the Down pass (hysteresis/deadband) and repeatability.
+
+### Next
+Reflash `delta_servo` with the new `config.h`, then repeat the full sweep
+(Up and Down) with `joint_angle_calibration_test.xlsx`. Target: every arm
+within ±0.5° of commanded and the three arms agreeing with each other.
