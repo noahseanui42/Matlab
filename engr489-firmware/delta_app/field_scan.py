@@ -29,9 +29,11 @@ import argparse
 import csv
 import json
 import math
+import queue
 import random
 import statistics
 import sys
+import threading
 import time
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
@@ -95,42 +97,74 @@ def frame(mode, payload=None):
 # Robot link
 # --------------------------------------------------------------------------
 class DeltaLink:
-    """Serial link to delta_servo. Sets DTR (the R4's USB CDC needs it)."""
+    """Serial link to delta_servo. Sets DTR (the R4's USB CDC needs it).
 
-    def __init__(self, port, dtr=robot_config.SERIAL_DTR):
-        import serial   # pyserial; imported here so --simulate needs nothing
-        self.ser = serial.Serial()
-        self.ser.port = port
-        self.ser.baudrate = 115200
-        self.ser.timeout = 0.05
-        self.ser.dtr = dtr      # set before open() so it is asserted on connect
-        self.ser.open()
-        time.sleep(1.0)
-        self.ser.reset_input_buffer()
+    A background thread reads the port all the time. The firmware streams a
+    status line every 20 ms; if nothing reads them (while the scan waits at a
+    prompt or reads the sensor) they back up in the Arduino, and after
+    flush_input() the old lines still arrive first. An old en=0 line made the
+    enable check fail although the robot had enabled; an old mv=0 line could
+    look like an arrival."""
+
+    def __init__(self, port, dtr=robot_config.SERIAL_DTR, ser=None):
+        if ser is None:
+            import serial   # pyserial; imported here so --simulate needs nothing
+            ser = serial.Serial()
+            ser.port = port
+            ser.baudrate = 115200
+            ser.timeout = 0.05
+            ser.dtr = dtr       # set before open() so it is asserted on connect
+            ser.open()
+            time.sleep(1.0)
+            ser.reset_input_buffer()
+        self.ser = ser
+        self._lines = queue.Queue()
+        self._stop = threading.Event()
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader.start()
+
+    def _read_loop(self):
+        while not self._stop.is_set():
+            try:
+                line = self.ser.readline()
+            except Exception:   # port closed or unplugged: status() then times out
+                return
+            if line:
+                self._lines.put(line)
 
     def status(self, timeout_s):
         """Next status dict {"deg","mv","run","en","e"}, or None on timeout.
         Partial/garbled lines are skipped."""
-        t0 = time.monotonic()
-        while time.monotonic() - t0 < timeout_s:
-            line = self.ser.readline().strip()
-            if not line:
-                continue
+        deadline = time.monotonic() + timeout_s
+        while True:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return None
+            try:
+                line = self._lines.get(timeout=left).strip()
+            except queue.Empty:
+                return None
             try:
                 j = json.loads(line)
             except ValueError:
                 continue
             if isinstance(j, dict) and all(k in j for k in ("deg", "mv", "en", "e")):
                 return j
-        return None
 
     def send(self, mode, payload=None):
         self.ser.write(frame(mode, payload))
 
     def flush_input(self):
-        self.ser.reset_input_buffer()
+        """Drop every status line received so far."""
+        while True:
+            try:
+                self._lines.get_nowait()
+            except queue.Empty:
+                return
 
     def close(self):
+        self._stop.set()
+        self._reader.join(timeout=1.0)
         self.ser.close()
 
 
@@ -143,11 +177,15 @@ def ensure_enabled(link, confirm=input):
         print("Support the arms near flat and switch servo power ON.")
         confirm("Press Enter to enable (Ctrl+C to abort)... ")
         link.send(8, {"enable": 0})      # enable:0 means ENABLE (inverted)
-        time.sleep(0.5)
+        time.sleep(0.2)
         link.flush_input()
-        st = link.status(2.0)
-        if st is None or st["en"] == 0:
-            raise ScanError("Robot did not enable.")
+        t0 = time.monotonic()
+        while True:                      # look at every line for up to 3 s, not just the first
+            st = link.status(1.0)
+            if st is not None and st["en"] == 1:
+                break
+            if time.monotonic() - t0 > 3.0:
+                raise ScanError("Robot did not enable.")
     return st
 
 
@@ -163,6 +201,7 @@ def move_probe(link, cfg, xyz):
     time.sleep(0.1)
     link.flush_input()
     t0 = time.monotonic()
+    seen_moving = False
     while True:
         st = link.status(2.0)
         if st is None:
@@ -171,7 +210,14 @@ def move_probe(link, cfg, xyz):
             raise ScanError("Robot is disabled. Enable it before moving.")
         if st["e"] in (3, 4):
             raise ScanError(f"Firmware rejected the move (e={st['e']}).")
-        if st["mv"] == 0:
+        if st["e"] == 1:                 # unreachable: the firmware never starts the move
+            return 1, st
+        if st["mv"] == 1:
+            seen_moving = True
+        elif seen_moving or time.monotonic() - t0 > 1.0:
+            # arrived: mv 1 -> 0. A move lasts >= 200 ms (10+ lines with mv=1), so
+            # an mv=0 line before any mv=1 is from before the command; after 1 s
+            # with no mv=1 at all, trust mv=0.
             return st["e"], st
         if time.monotonic() - t0 > cfg.move_timeout_s:
             raise ScanError(f"Move to {tuple(xyz)} timed out.")

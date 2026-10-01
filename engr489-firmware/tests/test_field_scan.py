@@ -62,3 +62,71 @@ def test_speed_sent_as_int(tmp_path):
     moves = [pl for m, pl in link.sent if m == 2]
     assert moves and all(type(pl["v"]) is int and pl["v"] == 5 for pl in moves)
     assert b'"v":5,' in fs.frame(2, moves[0])
+
+
+class BackloggedSerial:
+    """Stands in for pyserial, the way delta_servo's backed-up USB stream
+    arrives after a command: `stale` lines at once (queued in the Arduino
+    before the command), then `live` lines one per 20 ms."""
+
+    def __init__(self, stale, live):
+        self.queue, self.sent, self.closed = [], [], False
+        self.stale, self.live = stale, live
+
+    @staticmethod
+    def line(mv=0, en=0, e=0):
+        return json.dumps({"deg": [0, 0, 0], "mv": mv, "run": 0, "en": en, "e": e}).encode() + b"\r\n"
+
+    def readline(self):
+        import time
+        if self.closed:
+            raise OSError("closed")
+        if self.queue:
+            delay, d = self.queue.pop(0)
+            time.sleep(delay)
+            return self.line(**d)
+        time.sleep(0.005)
+        return b""
+
+    def write(self, data):
+        self.sent.append(data)
+        self.queue += [(0.0, d) for d in self.stale] + [(0.02, d) for d in self.live]
+
+    def close(self):
+        self.closed = True
+
+
+def test_enable_ignores_backed_up_disabled_lines():
+    # Bench 2026-10-02: the stream backed up while the prompt waited for Enter;
+    # the first line read after enabling was an old en=0 one, so the scan
+    # stopped with "Robot did not enable" although the robot had enabled.
+    ser = BackloggedSerial(stale=[], live=[{"en": 0}] * 15 + [{"en": 1}] * 10)
+    ser.queue = [(0.0, {"en": 0})]          # the disabled robot before Enter
+    link = fs.DeltaLink("fake", ser=ser)
+    try:
+        st = fs.ensure_enabled(link, confirm=lambda *_: None)
+        assert st["en"] == 1 and ser.sent == [fs.frame(8, {"enable": 0})]
+    finally:
+        link.close()
+
+
+def test_move_waits_for_motion_before_trusting_mv0():
+    # an old mv=0 line after the command must not count as "arrived"
+    ser = BackloggedSerial(stale=[], live=[{"en": 1, "mv": 0}] * 15 + [{"en": 1, "mv": 1}] * 10
+                           + [{"en": 1, "mv": 0, "e": 5}])
+    link = fs.DeltaLink("fake", ser=ser)
+    try:
+        err, st = fs.move_probe(link, fs.ScanConfig(), (0, 0, -650))
+        assert err == 5 and st["mv"] == 0
+    finally:
+        link.close()
+
+
+def test_unreachable_move_returns_at_once():
+    ser = BackloggedSerial(stale=[], live=[{"en": 1, "e": 1}] * 30)
+    link = fs.DeltaLink("fake", ser=ser)
+    try:
+        err, _ = fs.move_probe(link, fs.ScanConfig(), (0, 0, -400))
+        assert err == 1
+    finally:
+        link.close()
