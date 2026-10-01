@@ -130,3 +130,11 @@ def test_unreachable_move_returns_at_once():
         assert err == 1
     finally:
         link.close()
+
+
+def test_meta_records_the_calibrated_geometry(tmp_path):
+    # with the correction off too: SP 75 / L_UP 177 / remap, not robot_config's 150 / 180
+    cfg = make_cfg(tmp_path, nx=1, ny=1, nz=1)
+    p = fs.run_scan(fs.FakeLink(), fs.FakeMag(), cfg, "t", confirm=lambda *_: None, out=lambda *_: None)
+    g = json.loads(p.with_suffix(".meta.json").read_text())["geometry"]
+    assert (g["SB"], g["SP"], g["L_UP"], g["L_LO"], g["GEOM_TO_PHYS"]) == (175.0, 75.0, 177.0, 625.0, [2, 0, 1])

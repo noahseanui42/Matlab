@@ -48,6 +48,10 @@ CSV_COLUMNS = [
     "sent_x_mm", "sent_y_mm", "sent_z_mm",
 ]   # first 12 match FieldScan/run_field_scan.m, so plot_field_map.m reads both
 CORRECTIONS = ("off", "hybrid")
+# Geometry of the calibrated firmware (branch claude/amazing-lovelace-onixrv),
+# from the correction file; no numpy needed, so it is recorded with the correction off too.
+CALIBRATED_GEOMETRY = json.loads(
+    (Path(__file__).resolve().parent / "pose_correction_hybrid.json").read_text())["geometry"]
 
 
 @dataclass
@@ -336,8 +340,10 @@ def run_scan(link, mag, cfg, label="scan", note="", coil_current_A=None,
         "coil_current_A": coil_current_A, "n_points": n, "csv": csv_path.name,
         "frame": "sensor axes, gauss, raw (apply R_sensor_to_robot in MATLAB)",
         "config": asdict(cfg), "sensor": mag.info() if hasattr(mag, "info") else {},
-        "geometry": {"SB": robot_config.SB, "SP": robot_config.SP,
-                     "L_UP": robot_config.L_UP, "L_LO": robot_config.L_LO},
+        # The firmware does the IK, so the geometry that matters is the flashed one.
+        # Record the calibrated firmware's (as the correction does), not this
+        # branch's robot_config.py, which still has the older master values.
+        "geometry": CALIBRATED_GEOMETRY,
         "correction": dict(corr.info(), points_outside_valid_box=n_outside,
                            geometry_mismatch_with_robot_config={k: list(v) for k, v in mismatch.items()})
                       if corr else {"name": "off"},
