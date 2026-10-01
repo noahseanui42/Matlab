@@ -148,3 +148,20 @@ Not run in MATLAB.
 - `robot_config.SERIAL_PORT_DEFAULT = /dev/cu.usbmodem14101` was found on the
   GUI Mac and may be different on the MacBook Pro. Use
   `serialportlist("available")` to find the port.
+
+## Position correction (branch claude/field-scan-pose-correction, not merged)
+
+`field_scan.py --correction hybrid` aims each move past its target by the servos'
+predicted shortfall (`delta_app/pose_correction.py`, `pose_correction_hybrid.json`).
+Calibrated and validated in the ENGR489 report repo (`calibration/2026-10-01_*.md`):
+corner error about 19 → 2.3 mm rms inside x ±50, y ±150, z −600 to −700. Default is
+`off`. CSV adds `sent_x_mm, sent_y_mm, sent_z_mm`; the first 12 columns are unchanged.
+
+**Geometry on this branch is the old master version.** `robot_config.py` and
+`delta_servo/config.h` here have SP 150, L_UP 180, no arm remap, the first-bring-up
+servo calibration and no upward approach. The robot was calibrated on
+`claude/amazing-lovelace-onixrv` (SP 75, L_UP 177, `GEOM_TO_PHYS = [2, 0, 1]`, refitted
+CAL, upward approach). Flash that firmware, not this branch's `delta_servo/`. The
+correction carries the calibrated geometry in its JSON and `field_scan.py` warns when
+`robot_config.py` differs; the delta app on this branch uses the old values for its
+own checks and plot.

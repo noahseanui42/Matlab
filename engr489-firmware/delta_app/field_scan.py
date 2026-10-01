@@ -9,11 +9,17 @@ one program can hold the port).
     python field_scan.py --label baseline --note "coils off"
     python field_scan.py --label coils_on --coil-current 2.0
     python field_scan.py --simulate --label demo        # no hardware
+    python field_scan.py --label coils_on --correction hybrid   # with position correction
 
 Per point: send a joint move, wait for the status stream's mv 1->0 (arrived),
 settle, average N magnetometer samples, append a CSV row (flushed at once,
 so Ctrl+C keeps the data). Points the firmware reports unreachable (e=1) are
 logged as NaN. The robot is left ENABLED at the end (disabling drops the arms).
+
+--correction hybrid aims each move past its target by the servos' predicted
+shortfall (pose_correction.py), so the probe lands on the grid point. x_mm..z_mm
+are always the TARGET (where the reading belongs); sent_x_mm..sent_z_mm are the
+coordinates actually sent. Validated inside x +-50, y +-150, z -600..-700.
 
 Field values are raw gauss in SENSOR axes. Apply the sensor->robot rotation
 (cfg R_sensor_to_robot) in the MATLAB calibration stage.
@@ -37,7 +43,9 @@ CSV_COLUMNS = [
     "idx", "x_mm", "y_mm", "z_mm", "Bx_G", "By_G", "Bz_G",
     "Bx_std_G", "By_std_G", "Bz_std_G", "err", "t_s",
     "n_samples", "deg1", "deg2", "deg3",
+    "sent_x_mm", "sent_y_mm", "sent_z_mm",
 ]   # first 12 match FieldScan/run_field_scan.m, so plot_field_map.m reads both
+CORRECTIONS = ("off", "hybrid")
 
 
 @dataclass
@@ -55,6 +63,7 @@ class ScanConfig:
     n_avg: int = 20
     sample_dt_s: float = 0.02
     out_dir: str = str(Path(__file__).resolve().parent.parent.parent / "FieldScan" / "data")
+    correction: str = "off"          # "off" or "hybrid" (pose_correction.py)
 
 
 class ScanError(RuntimeError):
@@ -145,7 +154,8 @@ def ensure_enabled(link, confirm=input):
 def move_probe(link, cfg, xyz):
     """Joint move of the PROBE to xyz and block until arrived (mv 1->0).
     Returns (err_code, status). err 1 = unreachable (robot did not move),
-    5 = servo pulse clamped."""
+    5 = servo pulse clamped. xyz is what is SENT: pass the corrected target
+    when the position correction is on."""
     c = [round(a - b, 2) for a, b in zip(xyz, cfg.tcp)]   # firmware takes effector centre
     link.send(2, {"n": 0, "i": 0, "v": int(cfg.speed_v), "a": 0, "c": c})
     # Every move lasts >= 200 ms (T_MIN_MS): after 100 ms, anything still
@@ -224,10 +234,45 @@ def read_avg(mag, n, dt_s):
 # --------------------------------------------------------------------------
 # Scan
 # --------------------------------------------------------------------------
+def load_correction(cfg):
+    """The PoseCorrection for cfg.correction, or None when it's off."""
+    if cfg.correction not in CORRECTIONS:
+        raise ScanError(f"Unknown correction {cfg.correction!r}; choose from {CORRECTIONS}.")
+    if cfg.correction == "off":
+        return None
+    import pose_correction   # numpy; only needed with the correction on
+    return pose_correction.PoseCorrection.load(tcp=cfg.tcp)
+
+
+def corrected_target(corr, p):
+    """(target to send, None) or (None, reason) if the correction can't reach it."""
+    if corr is None:
+        return tuple(p), None
+    import pose_correction
+    try:
+        return tuple(float(v) for v in corr.compensate(p)), None
+    except pose_correction.Unreachable as e:
+        return None, str(e)
+
+
 def run_scan(link, mag, cfg, label="scan", note="", coil_current_A=None,
              confirm=input, out=print):
     pts = scan_grid(cfg.xr, cfg.yr, cfg.zr, cfg.nx, cfg.ny, cfg.nz)
     n = len(pts)
+    corr = load_correction(cfg)
+    n_outside = sum(not corr.in_valid_box(p) for p in pts) if corr else 0
+    mismatch = {}
+    if corr:
+        import pose_correction
+        mismatch = pose_correction.geometry_mismatch()
+        if mismatch:
+            out("WARNING: robot_config.py geometry differs from the geometry the correction was "
+                f"calibrated with {mismatch} (robot_config value, calibrated value). The correction uses "
+                "the calibrated geometry. Make sure the robot runs the calibrated firmware "
+                "(branch claude/amazing-lovelace-onixrv), not this branch's delta_servo.")
+    if n_outside:
+        out(f"WARNING: {n_outside} of {n} points are outside the box the {cfg.correction} "
+            f"correction was validated in ({corr.valid_box}); it is extrapolating there.")
     out_dir = Path(cfg.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -247,6 +292,10 @@ def run_scan(link, mag, cfg, label="scan", note="", coil_current_A=None,
         "config": asdict(cfg), "sensor": mag.info() if hasattr(mag, "info") else {},
         "geometry": {"SB": robot_config.SB, "SP": robot_config.SP,
                      "L_UP": robot_config.L_UP, "L_LO": robot_config.L_LO},
+        "correction": dict(corr.info(), points_outside_valid_box=n_outside,
+                           geometry_mismatch_with_robot_config={k: list(v) for k, v in mismatch.items()})
+                      if corr else {"name": "off"},
+        "positions": "x_mm..z_mm = target; sent_x_mm..sent_z_mm = coordinates sent to the robot",
         "finished": None, "points_done": 0, "points_unreachable": 0, "aborted": False,
     }
 
@@ -263,7 +312,12 @@ def run_scan(link, mag, cfg, label="scan", note="", coil_current_A=None,
             f.flush()
             out(f"Scanning {n} points -> {csv_path}")
             for k, p in enumerate(pts, 1):
-                err, st = move_probe(link, cfg, p)
+                send, why = corrected_target(corr, p)
+                if send is None:                 # correction would leave the reach: don't move
+                    out(f"  point {k} {p}: correction {why}; logged as unreachable")
+                    err, st = 1, {}
+                else:
+                    err, st = move_probe(link, cfg, send)
                 if err == 1:
                     B, Bsd, ns = [math.nan] * 3, [math.nan] * 3, 0
                     n_skipped += 1
@@ -274,7 +328,8 @@ def run_scan(link, mag, cfg, label="scan", note="", coil_current_A=None,
                 w.writerow([k, *(f"{v:.2f}" for v in p),
                             *(f"{v:.6f}" for v in B), *(f"{v:.6f}" for v in Bsd),
                             err, f"{time.monotonic() - t_scan:.2f}", ns,
-                            *(f"{d:.3f}" for d in deg)])
+                            *(f"{d:.3f}" for d in deg),
+                            *(f"{v:.2f}" for v in (send or [math.nan] * 3))])
                 f.flush()
                 meta["points_done"] = k
                 eta = (time.monotonic() - t_scan) / k * (n - k)
@@ -304,7 +359,9 @@ class FakeLink:
     """Mimics delta_servo: replays mv=1 for a few status lines after a move,
     then mv=0. Points with |x|,|y| > reach or z outside [-790,-550] -> e=1."""
 
-    def __init__(self, move_lines=3, reach=150.0):
+    # reach 200: with --correction hybrid, targets at y = +-150 are sent out to about
+    # +-170 mm, which the real robot reaches (pose_correction.ik checks it properly)
+    def __init__(self, move_lines=3, reach=200.0):
         self.en, self.pos, self.pending, self.e = 0, None, 0, 0
         self.move_lines, self.reach = move_lines, reach
         self.sent = []
@@ -363,11 +420,14 @@ def main(argv=None):
     ap.add_argument("--x", nargs=3, type=float, metavar=("MIN", "MAX", "N"))
     ap.add_argument("--y", nargs=3, type=float, metavar=("MIN", "MAX", "N"))
     ap.add_argument("--z", nargs=3, type=float, metavar=("MIN", "MAX", "N"))
+    ap.add_argument("--correction", choices=CORRECTIONS, default=cfg.correction,
+                    help="position correction: off (default) or hybrid (pose_correction.py)")
     ap.add_argument("--simulate", action="store_true", help="fake robot and sensor, no hardware")
     a = ap.parse_args(argv)
 
     cfg.port, cfg.speed_v, cfg.settle_s = a.port, a.speed, a.settle
     cfg.n_avg, cfg.mag_serial, cfg.out_dir = a.n_avg, a.mag_serial, a.out_dir
+    cfg.correction = a.correction
     for axis, v in (("x", a.x), ("y", a.y), ("z", a.z)):
         if v:
             setattr(cfg, axis + "r", (v[0], v[1]))
