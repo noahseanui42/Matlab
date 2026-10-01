@@ -3,7 +3,9 @@ function plot_field_map(dataFile, baselineFile)
 %
 %   plot_field_map(file)                 % raw field (includes Earth's field)
 %   plot_field_map(file, baselineFile)   % coil field only: file minus a coils-off
-%                                        % scan taken over the same grid
+%                                        % scan, matched point by point on position
+%
+% Works on CSVs from run_field_scan and from compile_scan.
 %
 % Figure 1: field vectors, coloured by |B|
 % Figure 2: |B| on slices through the centre of the scan volume
@@ -17,10 +19,17 @@ what = "Raw field";
 
 if nargin > 1 && strlength(string(baselineFile)) > 0
     T0 = readtable(baselineFile);
-    if height(T0) ~= height(T) || any(abs([T0.x_mm T0.y_mm T0.z_mm] - P) > 1e-6, 'all')
-        error("Baseline was not taken on the same grid as the data file.");
+    % match points by position (to 0.1 mm), so skipped or reordered points still line up
+    [found, loc] = ismember(round(P, 1), round([T0.x_mm T0.y_mm T0.z_mm], 1), 'rows');
+    if ~any(found)
+        error("Baseline has no points in common with the data file.");
+    elseif ~all(found)
+        warning("%d of %d points have no baseline at the same position and are left out.", ...
+            nnz(~found), numel(found));
     end
-    B = B - [T0.Bx_G T0.By_G T0.Bz_G] * 100;
+    B0 = nan(size(B));
+    B0(found,:) = [T0.Bx_G(loc(found)) T0.By_G(loc(found)) T0.Bz_G(loc(found))] * 100;
+    B = B - B0;
     what = "Coil field (baseline subtracted)";
 end
 

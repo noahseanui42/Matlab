@@ -49,6 +49,36 @@ plot_field_map(c, b)                      % coil field only
 The baseline scan records the Earth's field, the servo motors' magnets and
 any sensor offset. Subtracting it leaves just the coils' field.
 
+## Alternative: run the delta app, compile afterwards
+
+If you'd rather drive the robot from the delta app's own programs, the app
+can log everything to CSV and MATLAB sorts it into points afterwards.
+
+1. **Make the programs** in MATLAB. Each point gets a 1.5 s "Wait time", and
+   grids over 50 points are split into several files:
+   ```matlab
+   make_program("magnet")          % grid from scan_config.m -> FieldScan/programs/
+   ```
+2. **In the delta app:** Connect → Enable → **File → Start data log** →
+   File → Program, then in that window File → Open the program → Upload → Start. For split grids, load and run
+   each file in turn. Finish with **File → Stop data log**. The log goes to
+   `FieldScan/data/deltalog_<time>.csv`.
+   (In the Python the delta app runs with, do `python -m pip install Phidget22` once.)
+3. **Compile and plot** in MATLAB:
+   ```matlab
+   f = compile_scan("data/deltalog_20261002_141500.csv");   % -> ..._points.csv
+   plot_field_map(f)
+   ```
+
+The log has one row per robot status line (about 50 per second): time,
+probe x/y/z (from the joint angles), angles, `mv/run/en/e` and the latest
+1044 reading. `compile_scan` finds each stop as a stretch where the joint
+angles don't change. `mv` can't be used for this, because the firmware
+reports `mv = 1` during a program's wait time. It then drops the first
+0.5 s, averages the rest and rounds positions to the nearest 1 mm. The output
+has the same columns as `run_field_scan`, plus `run_no` (which program run)
+and `n_samples`.
+
 ## Settings (`scan_config.m`)
 
 | Setting | Meaning |

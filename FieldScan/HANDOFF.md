@@ -91,6 +91,35 @@ GUI, triggered on `mv` 1→0 while `run==1`. Each point's dwell would need to
 be at least about 1.5 s. The status line has no point index, so points are
 numbered by counting arrivals.
 
+## Delta-app logging route (added after the first handoff)
+
+The user chose to **drive scans from the delta app and compile the data
+afterwards**:
+- `engr489-firmware/delta_app/scan_logger.py` writes a CSV row for each status
+  line the GUI parses. Each row holds time, FK probe xyz, deg, mv/run/en/e, the
+  latest 1044 field from a Phidget event thread, and a `b_seq` counter. In
+  `deltagui.py` this is wired to **File → Start/Stop data log** and a hook in
+  `readEncoders()`. The settings are `MAG_SERIAL`, `MAG_DATA_INTERVAL_MS` and
+  `SCAN_LOG_DIR` (defaults to `FieldScan/data`) in `robot_config.py`.
+  `Phidget22` was added to `requirements.txt`. All 12 tests pass. The logger
+  was checked with a fake magnetometer; the GUI hasn't been run with real
+  hardware.
+- `FieldScan/make_program.m` writes delta-app program files (the GUI's
+  2-line JSON format) with a "Wait time" after every point, in chunks of 50
+  or fewer (`MAX_POINTS`).
+- `FieldScan/compile_scan.m` splits the log into stops. **Correction to the
+  timing note above:** during a program's dwell the firmware's `isMoving()`
+  is true, so **`mv` stays 1 through the wait time**, and mv 1→0 is no good
+  as a per-point trigger for programs. Stops are found where the joint
+  angles are unchanged (|Δdeg| < 0.005 between status lines) for at least
+  `min_dwell_s`. The first `settle_s` is dropped, the rest averaged (one
+  sample per new `b_seq`), and xyz snapped to 1 mm. A Python port of the
+  algorithm was checked against a simulated 6-point log (firmware
+  smoothstep, dwell with mv=1): 6 of 6 stops found at the right positions.
+  The `.m` file itself has not been run in MATLAB.
+- `plot_field_map` now matches the baseline to the data **by position**
+  (0.1 mm) instead of requiring identical row order.
+
 ## Next steps (the user hasn't chosen between these)
 
 1. **Magnet repeatability test (the user's stated next step).** Fix a
