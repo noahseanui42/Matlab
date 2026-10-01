@@ -380,7 +380,8 @@ def run_scan(link, mag, cfg, label="scan", note="", coil_current_A=None,
                 meta["points_done"] = k
                 eta = (time.monotonic() - t_scan) / k * (n - k)
                 out(f"{k:4d}/{n}  [{p[0]:7.1f} {p[1]:7.1f} {p[2]:7.1f}]  "
-                    f"|B| = {math.sqrt(sum(b*b for b in B)):.4f} G  e={err}  ({eta:.0f} s left)")
+                    f"B = [{B[0]:7.4f} {B[1]:7.4f} {B[2]:7.4f}]  |B| = {math.sqrt(sum(b*b for b in B)):.4f} G  "
+                    f"e={err}  ({eta:.0f} s left)")
     except KeyboardInterrupt:
         meta["aborted"] = True
         out("Interrupted; data so far is saved.")
