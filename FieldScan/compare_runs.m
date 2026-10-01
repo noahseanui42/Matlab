@@ -64,7 +64,12 @@ if haveNoise
         error("Noise scan was not taken on the same grid as the magnet runs.");
     end
     B0  = [T0.Bx_G T0.By_G T0.Bz_G];
-    sd0 = [T0.Bx_std_G T0.By_std_G T0.Bz_std_G] / sqrt(cfg.n_avg);  % std of each point's mean
+    if ismember("n_samples", T0.Properties.VariableNames)      % field_scan.py records it
+        nAvg = max(T0.n_samples, 1);
+    else
+        nAvg = cfg.n_avg;
+    end
+    sd0 = [T0.Bx_std_G T0.By_std_G T0.Bz_std_G] ./ sqrt(nAvg);   % std of each point's mean
     u0  = B0 ./ max(vecnorm(B0, 2, 2), eps);                        % unit vector of B
     sigNoise = sqrt(sum((u0 .* sd0).^2, 2));                        % noise in |B|, G
 end
@@ -80,7 +85,9 @@ end
 idx = sub2ind([numel(xs) numel(ys) numel(zs)], ix, iy, iz);
 V = nan(numel(xs), numel(ys), numel(zs));
 V(idx) = Bmag;
-[Gx, Gy, Gz] = gradient(V, xs, ys, zs);         % G per mm; NaN where neighbours are missing
+% V is indexed (x,y,z), but gradient() treats dim 1 as y and dim 2 as x,
+% so pass the spacings swapped and take the outputs swapped.
+[Gy, Gx, Gz] = gradient(V, ys, xs, zs);         % G per mm; NaN where neighbours are missing
 gradMag = vecnorm([Gx(idx) Gy(idx) Gz(idx)], 2, 2);
 
 sigPos = sigB_corr ./ gradMag;                  % mm
@@ -102,7 +109,7 @@ else
     fprintf("noise floor: not supplied, sigma_B includes sensor noise (upper bound).\n");
 end
 fprintf("sigma_pos  : median %.3f mm, 95th percentile %.3f mm, max %.3f mm\n", ...
-    median(sigPos, 'omitnan'), prctile(sigPos(isfinite(sigPos)), 95), max(sigPos));
+    median(sigPos, 'omitnan'), pct95(sigPos), max(sigPos));
 fprintf("Note: sigma_B also contains field drift between runs (Earth/coil/temperature),\n");
 fprintf("so sigma_pos is an upper bound on the robot's true position repeatability.\n");
 
@@ -128,4 +135,12 @@ figure('Name', "Repeatability: histogram");
 histogram(sigPos(ok));
 grid on; xlabel('\sigma_{pos} (mm)'); ylabel('points');
 title(sprintf("median %.3f mm", median(sigPos, 'omitnan')));
+end
+
+function p = pct95(v)
+% 95th percentile without the Statistics Toolbox (linear interpolation).
+v = sort(v(isfinite(v)));
+if isempty(v), p = NaN; return; end
+k = 1 + 0.95 * (numel(v) - 1);
+p = v(floor(k)) + (k - floor(k)) * (v(ceil(k)) - v(floor(k)));
 end

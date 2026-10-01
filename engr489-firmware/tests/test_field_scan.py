@@ -51,3 +51,14 @@ def test_unreachable_points_logged_as_nan(tmp_path):
     bad = [r for r in rows if r["err"] == "1"]
     assert len(bad) == 6 and all(r["Bx_G"] == "nan" and r["n_samples"] == "0" for r in bad)
     assert json.loads(p.with_suffix(".meta.json").read_text())["points_unreachable"] == 6
+
+
+def test_speed_sent_as_int(tmp_path):
+    # ArduinoJson reads "v":5.0 as 0 (firmware then falls back to V_DEFAULT),
+    # so the speed must go out as a JSON integer even if set as a float.
+    cfg = make_cfg(tmp_path, speed_v=5.0, nx=1, ny=1, nz=1)
+    link = fs.FakeLink()
+    fs.run_scan(link, fs.FakeMag(), cfg, "t", confirm=lambda *_: None, out=lambda *_: None)
+    moves = [pl for m, pl in link.sent if m == 2]
+    assert moves and all(type(pl["v"]) is int and pl["v"] == 5 for pl in moves)
+    assert b'"v":5,' in fs.frame(2, moves[0])

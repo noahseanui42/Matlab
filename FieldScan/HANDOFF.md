@@ -4,8 +4,8 @@ This note is for whoever picks up the field-mapping work next. Read it before
 changing anything in `FieldScan/`.
 
 Repo: `noahseanui42/Matlab`, branch `claude/brave-edison-mui291`
-(FieldScan was added in commit "Add FieldScan: MATLAB field-mapping scan with
-the Phidget 1044"; no PR opened yet).
+(no PR opened yet). This branch now also contains the other session's
+`claude/gallant-planck-stiamj` work (`field_scan.py`, `compare_runs.m`).
 
 ## Project in one paragraph
 
@@ -49,7 +49,8 @@ Panel with the coils off. The user hadn't confirmed doing this.
 | `test_magnetometer.m` | Prints the sensor range, then 20 live readings |
 | `delta_connect.m`, `delta_status.m`, `delta_send.m`, `delta_move.m` | Serial link to `delta_servo`. Sets DTR (required on the R4's USB). Uses the GUI's framing `<2><{"n":0,"i":0,"v":V,"a":0,"c":[x,y,z]}><#>`, where `c` = probe position − TCP offset. Joint moves only (`i=0`). |
 | `run_field_scan.m` | Opens the magnetometer, then the robot. Asks before enabling (`<8><{"enable":0}>` means ENABLE; the logic is inverted). Parks the robot, then works through the serpentine grid from `Kinematics/scan_grid.m`. For each point: move, wait for `mv==0`, settle, average N samples, append a CSV row. Points the firmware reports as unreachable (`e=1`) are logged as NaN. Leaves the robot **enabled** at the end, because disabling lets the arms drop. |
-| `plot_field_map.m` | Field vectors coloured by \|B\|, \|B\| slices, and % deviation from the centre on the middle z plane. Optionally subtracts a coils-off baseline CSV taken on the same grid. Plots in µT; CSVs are in gauss. |
+| `plot_field_map.m` | Field vectors coloured by \|B\|, \|B\| slices, and % deviation from the centre on the middle z plane. Optionally subtracts a coils-off baseline, matched to the data by position (0.1 mm). Plots in µT; CSVs are in gauss. Reads CSVs from both `field_scan.py` and `run_field_scan.m`. |
+| `compare_runs.m` | Magnet repeatability, see below |
 | `make_demo_scan.m` | Fake Helmholtz-pair scan (Biot–Savart, R = 0.3 m, 50 A-turns) plus an Earth-field baseline, for trying the plots without hardware |
 | `README.md` | Setup and usage steps for the user |
 
@@ -74,65 +75,66 @@ was available. Expect small fixes on the first real run. Specific risks:
 - Handling of `Bsd` in `run_field_scan.m`: rotating the standard deviation
   with `abs(R)` is only approximate unless R is axis-aligned.
 
-## Timing and sync (explained to the user)
+## Decided: how scans are run
 
-The firmware streams `{"deg":[..],"mv":0|1,"run":0|1,"en":0|1,"e":0..5}`
-every 20 ms. **The `mv` change from 1 to 0 is the "arrived" trigger.** Every
-move takes at least 200 ms, which is why `delta_move` throws away buffered
-lines 100 ms after sending. Only one program can hold the serial port, so the
-delta GUI and MATLAB can't run at the same time.
+**`engr489-firmware/delta_app/field_scan.py` runs the scans and writes a CSV.
+MATLAB only post-processes.** The delta app is still used for set-up (connect,
+enable, jog, check reach, calibrate) but must be **closed** during a scan,
+because only one program can hold the serial port.
 
-Recommended to the user (**Option 1**): use the delta GUI to jog and set up,
-close it, then let MATLAB drive the scan. The GUI's program feature is capped
-at 50 points (`MAX_POINTS`).
+- `field_scan.py` was written by another session (branch
+  `claude/gallant-planck-stiamj`) and merged here. It is a Python port of
+  `run_field_scan.m`: the same framing, DTR, TCP offset, park position,
+  serpentine grid, mv 1→0 arrival, settle, average and NaN-for-unreachable
+  logic. It adds `n_samples, deg1..3` columns (the first 12 columns match
+  the MATLAB CSV), a `.meta.json` per scan (label, note, coil current, config,
+  sensor info, done/aborted), `--simulate` with `FakeLink`/`FakeMag`, and
+  `tests/test_field_scan.py`.
+- **Fixed after the merge:** the speed was sent as a JSON float (`"v":2.0`).
+  ArduinoJson's `doc["v"] | 0` reads a float as 0, and the firmware then
+  falls back to `V_DEFAULT` = 2, so `--speed` was silently ignored. This was
+  confirmed by feeding both frames through the compiled `protocol.cpp`. It is
+  now sent as an int, `--speed` is an int from 1 to 10, and a regression test
+  was added. All 17 tests pass.
+- **Removed:** the delta-app data log (`scan_logger.py`, File → Start data
+  log, `compile_scan.m`, `make_program.m`). `deltagui.py` and
+  `robot_config.py` are back to their master versions.
+- **Timing facts worth keeping:** status lines arrive every 20 ms, every move
+  takes at least 200 ms, and buffered lines are flushed 100 ms after a
+  command. **During a delta-app program's "Wait time" the firmware reports
+  `mv = 1`** (`isMoving()` includes DWELL), so mv can't mark stops inside
+  programs. That doesn't matter for `field_scan.py`, which sends single
+  manual moves.
 
-**Option 2** (offered, not chosen): add Phidget reads to the Python delta
-GUI, triggered on `mv` 1→0 while `run==1`. Each point's dwell would need to
-be at least about 1.5 s. The status line has no point index, so points are
-numbered by counting arrivals.
+## compare_runs.m (magnet repeatability)
 
-## Delta-app logging route (added after the first handoff)
+Also from the other session. It loads N runs on an identical grid, computes
+σ of |B| across runs per point, optionally subtracts a magnet-absent noise
+floor in quadrature, and divides by |∇|B|| to get σ_pos in mm. Points with a
+weak gradient are flagged. **Fixed after the merge:**
+- `gradient()` was called on V(x,y,z) as if dim 1 were x. MATLAB treats dim 2
+  as x, so the call errored on grids with nx ≠ ny and mixed up spacings
+  otherwise. It is now `[Gy,Gx,Gz] = gradient(V, ys, xs, zs)`.
+- `prctile` (Statistics Toolbox in older releases) was replaced with a local
+  `pct95`.
+- The noise floor now uses the CSV's `n_samples` column when present, not
+  `scan_config.m`'s `n_avg`.
 
-The user chose to **drive scans from the delta app and compile the data
-afterwards**:
-- `engr489-firmware/delta_app/scan_logger.py` writes a CSV row for each status
-  line the GUI parses. Each row holds time, FK probe xyz, deg, mv/run/en/e, the
-  latest 1044 field from a Phidget event thread, and a `b_seq` counter. In
-  `deltagui.py` this is wired to **File → Start/Stop data log** and a hook in
-  `readEncoders()`. The settings are `MAG_SERIAL`, `MAG_DATA_INTERVAL_MS` and
-  `SCAN_LOG_DIR` (defaults to `FieldScan/data`) in `robot_config.py`.
-  `Phidget22` was added to `requirements.txt`. All 12 tests pass. The logger
-  was checked with a fake magnetometer; the GUI hasn't been run with real
-  hardware.
-- `FieldScan/make_program.m` writes delta-app program files (the GUI's
-  2-line JSON format) with a "Wait time" after every point, in chunks of 50
-  or fewer (`MAX_POINTS`).
-- `FieldScan/compile_scan.m` splits the log into stops. **Correction to the
-  timing note above:** during a program's dwell the firmware's `isMoving()`
-  is true, so **`mv` stays 1 through the wait time**, and mv 1→0 is no good
-  as a per-point trigger for programs. Stops are found where the joint
-  angles are unchanged (|Δdeg| < 0.005 between status lines) for at least
-  `min_dwell_s`. The first `settle_s` is dropped, the rest averaged (one
-  sample per new `b_seq`), and xyz snapped to 1 mm. A Python port of the
-  algorithm was checked against a simulated 6-point log (firmware
-  smoothstep, dwell with mv=1): 6 of 6 stops found at the right positions.
-  The `.m` file itself has not been run in MATLAB.
-- `plot_field_map` now matches the baseline to the data **by position**
-  (0.1 mm) instead of requiring identical row order.
+Not run in MATLAB.
 
-## Next steps (the user hasn't chosen between these)
+## Next steps
 
-1. **Magnet repeatability test (the user's stated next step).** Fix a
-   reference magnet firmly, out of the arm's path, far enough away not to
-   overload the sensor. Run the same small grid 5–10 times
-   (`run_field_scan("magnet_run"+k)`), plus one run without the magnet for
-   the noise floor. **Offered: `compare_runs.m`.** It would compute the spread
-   of B across runs at each point, convert that to position repeatability as
-   σ_pos ≈ σ_B / |∇B| using the local gradient, and plot the result.
-2. Or Option 2 above (magnetometer inside the delta GUI).
-3. On the first real run, fix whatever breaks in MATLAB (see the risks above).
-4. Set `cfg.R_sensor_to_robot` once the 1044's mounting in the PLA holder
-   is known.
+1. Bench dry run: `python field_scan.py --label dryrun --x -25 25 3 --y -25 25 3 --z -675 -625 3`
+   with the robot outside the coil and the coils off. Check every point
+   logs `err=0` and |B| ≈ 0.55–0.6 G.
+2. Magnet repeatability: run the same small grid 5–10 times
+   (`--label magnet_run1` …), plus `--label no_magnet` with the magnet
+   removed, then `compare_runs("data/magnet_run*.csv", "data/no_magnet_….csv")`.
+3. Baseline (coils off) then coils-on scans in the coil, then
+   `plot_field_map(coils_on, baseline)`.
+4. Apply the sensor→robot rotation in MATLAB once the 1044's mounting is
+   known. `field_scan.py` logs raw sensor axes. `run_field_scan.m` applies
+   `cfg.R_sensor_to_robot` itself.
 
 ## Known inconsistencies elsewhere in the repo (not fixed)
 

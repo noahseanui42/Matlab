@@ -18,7 +18,6 @@ import serial.tools.list_ports
 import datetime as dt
 import time
 import pandas as pd
-from scan_logger import ScanLogger
 
 FONT = "Times New Roman"
 TEXT_SIZE = 12
@@ -153,10 +152,6 @@ class DeltaGUI:
         # it's inside an actual dropdown.
         self.file_menu.add_command(label="Program", command=self.programCreator)
         self.file_menu.add_command(label="Available COMs", command=showAvailableComs)
-        self.scan_logger = ScanLogger(robot_config.SCAN_LOG_DIR, robot_config.MAG_SERIAL,
-                                      robot_config.MAG_DATA_INTERVAL_MS)
-        self.file_menu.add_command(label="Start data log", command=self.toggleDataLog)
-        self.data_log_menu_index = self.file_menu.index('end')
         self.file_menu.add_command(label='Exit', command=self.exit)
         self.plot_menu = tk.Menu(self.menubar, tearoff=0)
         self.menubar.add_cascade(label='Plots', menu=self.plot_menu)
@@ -183,25 +178,8 @@ class DeltaGUI:
 
     def exit(self):
         """ Close the application """
-        self.scan_logger.stop()
         self.root.quit()
         self.root.destroy()
-
-    def toggleDataLog(self):
-        """ Start/stop logging every status line + the latest 1044 reading to CSV (scan_logger.py) """
-        if self.scan_logger.running:
-            path = self.scan_logger.path
-            self.scan_logger.stop()
-            self.file_menu.entryconfig(self.data_log_menu_index, label="Start data log")
-            tk.messagebox.showinfo(title="Data log stopped", message=f"Saved:\n{path}")
-            return
-        try:
-            path = self.scan_logger.start()
-        except Exception as e:
-            tk.messagebox.showwarning(title="Could not start data log", message=str(e))
-            return
-        self.file_menu.entryconfig(self.data_log_menu_index, label="Stop data log")
-        tk.messagebox.showinfo(title="Data log started", message=f"Logging to:\n{path}")
 
     def connect(self):
         """ Connect to/disconnect from the COM port """
@@ -271,13 +249,6 @@ class DeltaGUI:
                 pass
                 print(f"{e= }")
             else:
-                if self.scan_logger.running:
-                    try:
-                        xyz = self.delta.calculateFPK(data["deg"])  # probe (TCP) position, mm
-                    except (TypeError, ValueError, ZeroDivisionError):
-                        xyz = None
-                    self.scan_logger.log(data, xyz)
-
                 self.sendData()
 
                 end_time = time.time()

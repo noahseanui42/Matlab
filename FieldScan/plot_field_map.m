@@ -5,7 +5,7 @@ function plot_field_map(dataFile, baselineFile)
 %   plot_field_map(file, baselineFile)   % coil field only: file minus a coils-off
 %                                        % scan, matched point by point on position
 %
-% Works on CSVs from run_field_scan and from compile_scan.
+% Works on CSVs from field_scan.py and run_field_scan.m.
 %
 % Figure 1: field vectors, coloured by |B|
 % Figure 2: |B| on slices through the centre of the scan volume

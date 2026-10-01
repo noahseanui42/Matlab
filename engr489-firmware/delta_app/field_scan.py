@@ -44,7 +44,7 @@ CSV_COLUMNS = [
 class ScanConfig:
     port: str = robot_config.SERIAL_PORT_DEFAULT
     tcp: tuple = robot_config.TCP_DEFAULT
-    speed_v: float = 2.0             # 1..10 -> 5..50 mm/s
+    speed_v: int = 2                 # 1..10 -> 5..50 mm/s; must be an int (firmware reads 2.0 as 0)
     move_timeout_s: float = 30.0
     settle_s: float = 0.5
     park_xyz: tuple = (0.0, 0.0, -650.0)
@@ -147,7 +147,7 @@ def move_probe(link, cfg, xyz):
     Returns (err_code, status). err 1 = unreachable (robot did not move),
     5 = servo pulse clamped."""
     c = [round(a - b, 2) for a, b in zip(xyz, cfg.tcp)]   # firmware takes effector centre
-    link.send(2, {"n": 0, "i": 0, "v": cfg.speed_v, "a": 0, "c": c})
+    link.send(2, {"n": 0, "i": 0, "v": int(cfg.speed_v), "a": 0, "c": c})
     # Every move lasts >= 200 ms (T_MIN_MS): after 100 ms, anything still
     # buffered from before the command is stale.
     time.sleep(0.1)
@@ -354,7 +354,8 @@ def main(argv=None):
     ap.add_argument("--note", default="", help="free text stored in the metadata, e.g. 'coils off'")
     ap.add_argument("--coil-current", type=float, default=None, help="coil current (A), stored in metadata")
     ap.add_argument("--port", default=cfg.port)
-    ap.add_argument("--speed", type=float, default=cfg.speed_v)
+    ap.add_argument("--speed", type=int, choices=range(1, 11), default=cfg.speed_v,
+                    help="1..10 (5..50 mm/s)")
     ap.add_argument("--settle", type=float, default=cfg.settle_s)
     ap.add_argument("--n-avg", type=int, default=cfg.n_avg)
     ap.add_argument("--mag-serial", type=int, default=cfg.mag_serial)

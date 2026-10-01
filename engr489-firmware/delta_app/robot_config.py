@@ -5,7 +5,6 @@
 Must stay numerically in sync with delta_servo/config.h — see
 tests/test_config_sync.py, which enforces this.
 """
-import os
 
 # Geometry (mm). SB/SP are equilateral-triangle SIDE lengths through the
 # joint centres (HANDOFF §4 Q1: confirmed as side lengths).
@@ -33,10 +32,3 @@ ELBOW_JOINT_WIDTH = 35.0  # user's actual parallelogram rod spacing, confirmed (
 
 SERIAL_PORT_DEFAULT = "/dev/cu.usbmodem14101"  # confirmed during bring-up on the GUI Mac
 SERIAL_DTR = True               # confirmed needed during bring-up: no stream arrived at False
-
-# Scan data log (File > Start data log, see scan_logger.py). The CSVs land next
-# to the MATLAB scan data so FieldScan/compile_scan.m can find them.
-MAG_SERIAL = 302277        # Phidget 1044 serial number (0 = first one found)
-MAG_DATA_INTERVAL_MS = 20
-SCAN_LOG_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                             "..", "..", "FieldScan", "data"))
