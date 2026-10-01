@@ -60,7 +60,7 @@ class ScanConfig:
     tcp: tuple = robot_config.TCP_DEFAULT
     speed_v: int = 2                 # 1..10 -> 5..50 mm/s; must be an int (firmware reads 2.0 as 0)
     move_timeout_s: float = 30.0
-    settle_s: float = 0.5
+    settle_s: float = 5.0             # after the move ends (dip, then rise): the arms keep swinging for a few s
     park_xyz: tuple = (0.0, 0.0, -650.0)
     xr: tuple = (-50.0, 50.0); nx: int = 5
     yr: tuple = (-50.0, 50.0); ny: int = 5
@@ -466,7 +466,8 @@ def main(argv=None):
     ap.add_argument("--port", default=cfg.port)
     ap.add_argument("--speed", type=int, choices=range(1, 11), default=cfg.speed_v,
                     help="1..10 (5..50 mm/s)")
-    ap.add_argument("--settle", type=float, default=cfg.settle_s)
+    ap.add_argument("--settle", type=float, default=cfg.settle_s,
+                    help="wait after each move ends (after the dip and rise) before sampling, s")
     ap.add_argument("--n-avg", type=int, default=cfg.n_avg)
     ap.add_argument("--mag-serial", type=int, default=cfg.mag_serial)
     ap.add_argument("--out-dir", default=cfg.out_dir)

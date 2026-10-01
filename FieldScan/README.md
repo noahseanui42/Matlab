@@ -44,7 +44,7 @@ What happens:
   power on, then enables it.
 - It parks at `(0, 0, -650)`, then goes through the grid in serpentine order.
   At each point it moves, waits for the robot to report it has stopped
-  (`mv` 1→0), settles 0.5 s, averages 20 sensor readings and writes the row
+  (`mv` 1→0, after the dip and rise), settles 5 s, averages 20 sensor readings and writes the row
   straight away. Ctrl+C keeps everything measured so far.
 - Points the firmware rejects as unreachable are written as NaN.
 - At the end it parks and leaves the robot **enabled**, because disabling
@@ -60,7 +60,7 @@ Useful options:
 |---|---|---|
 | `--x MIN MAX N`, `--y …`, `--z …` | Grid (probe coordinates, mm) and points per axis | ±50, ±50, −700…−600, 5 each |
 | `--speed` | 1–10 (5–50 mm/s) | 2 |
-| `--settle` | Wait after each move, s | 0.5 |
+| `--settle` | Wait after each move (after the rise), s | 5.0 |
 | `--n-avg` | Readings averaged per point | 20 |
 | `--port` | Arduino serial port | from `robot_config.py` |
 | `--note`, `--coil-current` | Stored in the `.meta.json` | |
