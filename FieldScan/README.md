@@ -9,6 +9,10 @@ three parts:
 | The scan: move through the grid, read the 1044, write a CSV | **`field_scan.py`** (`engr489-firmware/delta_app/`) |
 | Afterwards: baseline subtraction, plots, repeatability | **MATLAB** (this folder) |
 
+**Need the probe's tilt too?** `FieldScanTilt/` is a copy of this folder that also
+logs pitch, roll and gyro at every point (same first 19 CSV columns, so these
+scripts read its files). See `FieldScanTilt/README.md`.
+
 Only one program can use the Arduino's serial port at a time, so **close the
 delta app before running `field_scan.py`**. Open it again afterwards if you
 need to jog.
