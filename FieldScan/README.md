@@ -51,6 +51,7 @@ What happens:
   lets the arms drop.
 
 Output goes to `FieldScan/data/<label>_<time>.csv`, plus a `.meta.json`
+(label convention and the list of scans so far: `data/INDEX.md`)
 recording the label, note, coil current, every setting, the sensor's serial
 and range, and whether the scan finished.
 
@@ -94,12 +95,14 @@ coefficients in `delta_app/pose_correction_hybrid.json`).
 
 ```matlab
 plot_field_map("data/coils_on_….csv", "data/baseline_….csv")   % coil field only
-plot_field_layers("data/mag_off_1_….csv")                       % heat map, direction map, side views, 3D stacked map
-plot_field_layers("data/mag_off_1_….csv", "", "Side", "yz")     % side views in y-z instead of x-z
-plot_field_arrows3d("data/mag_off_1_….csv")                     % 3D arrows coloured by layer on see-through planes
-plot_field_arrows3d("data/mag_off_1_….csv", "", "Equal", true)  % same, all arrows the same length
-plot_field_layers("data/mag_off_1_….csv", "data/no_magnet_….csv") % same, magnet (or coil) field only
-plot_field_layers("data/mag_off_1_….csv", "", "Save", true)     % also save PNGs next to the CSV
+m  = "data/magnet-xpos_corr-off_run1_20261002_180000.csv";
+bg = "data/nomagnet_corr-off_run1_20261002_172221.csv";
+plot_field_layers(m)                       % heat map, direction map, side views, 3D stacked map
+plot_field_layers(m, "", "Side", "yz")     % side views in y-z instead of x-z
+plot_field_arrows3d(m)                     % 3D arrows coloured by layer on see-through planes
+plot_field_arrows3d(m, "", "Equal", true)  % same, all arrows the same length
+plot_field_layers(m, bg)                   % same, magnet (or coil) field only
+plot_field_layers(m, "", "Save", true)     % also save PNGs next to the CSV
 ```
 
 The baseline scan records the Earth's field, the servo motors' magnets and
@@ -109,10 +112,25 @@ matched by position, so a point skipped in one scan doesn't shift the rest.
 Magnet repeatability: run the same grid several times with a fixed magnet,
 plus once with the magnet removed, then:
 ```matlab
-R = compare_runs("data/magnet_run*.csv", "data/no_magnet_….csv");
+R = compare_runs("data/magnet-xpos_corr-off_run*.csv", "data/nomagnet_corr-off_run1_20261002_172221.csv");
 ```
 This reports the spread of |B| across runs and converts it to a position
 repeatability in mm (spread ÷ field gradient).
+
+Maps of those results, and correction off vs hybrid side by side:
+```matlab
+bg   = "data/nomagnet_corr-off_run1_20261002_172221.csv";
+Roff = compare_runs("data/magnet-xpos_corr-off_run*.csv", bg);
+Rhyb = compare_runs("data/magnet-xpos_corr-hybrid_run*.csv", bg);
+plot_repeatability_layers(Roff, 'Title', 'correction off')   % sigma_pos and |grad B| per z layer
+S = compare_repeatability(Roff, Rhyb, 'Names', {'off', 'hybrid'})   % histograms + point-by-point
+```
+A sigma_pos of 0 means the runs agreed to within the sensor noise at that point.
+
+What the position correction did to each point (sent vs target, needs a `--correction hybrid` scan):
+```matlab
+plot_correction_map("data/magnet-xpos_corr-hybrid_run1_20261002_182828.csv")   % add 'Save', true for a PNG
+```
 
 To try the plots without hardware:
 ```matlab
