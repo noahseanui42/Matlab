@@ -114,6 +114,21 @@ R = compare_runs("data/magnet_run*.csv", "data/no_magnet_….csv");
 This reports the spread of |B| across runs and converts it to a position
 repeatability in mm (spread ÷ field gradient).
 
+Dipole fit (validation): fit a point dipole, its moment and position, to a magnet
+scan minus a no-magnet scan on the same grid, and report the residuals:
+```matlab
+F = fit_dipole("data/2026-10-02_dryrun1_magnet_hybrid_….csv", "data/2026-10-02_dryrun1_no_magnet.csv");
+F = fit_dipole("data/2026-10-02_dryrun1_magnet_*.csv", "data/2026-10-02_dryrun1_no_magnet.csv");  % each run + spread
+F = fit_dipole("data/mag_off_1_….csv")                     % no baseline: also fits a constant background
+F = fit_dipole(file, baseline, "Save", true)              % <name>_dipole.mat + PNGs next to the CSV
+```
+It prints the magnet position (mm, robot frame) and moment (A m², direction, |m|) with
+1σ uncertainties, plus the residual RMS (G and µT, per axis), the relative RMS, R² and
+the residual compared with the sensor noise. Figures: measured vs model per component,
+measured and model arrows with the fitted magnet, residual vs distance from the magnet.
+Use hybrid-corrected scans where possible (positions are the target grid points).
+`test_fit_dipole` checks the fit against a known dipole, no hardware needed.
+
 To try the plots without hardware:
 ```matlab
 [f, f0] = make_demo_scan(); plot_field_map(f, f0)
