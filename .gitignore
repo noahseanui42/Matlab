@@ -1,0 +1,14 @@
+# MATLAB / Simulink build and autosave files
+slprj/
+*.slxc
+*.asv
+*.autosave
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
