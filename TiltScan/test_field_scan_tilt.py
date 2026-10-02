@@ -240,3 +240,19 @@ def test_timestamps_per_row(tmp_path):
         # the window ends just before the row is stamped (t_s, s since the scan start)
         assert 0 <= float(r["t_s"]) * 1000 - (b - t0) <= 25
         prev = b
+
+
+def test_magnet_position_in_name_and_meta(tmp_path):
+    cfg = make_cfg(tmp_path, nx=1, ny=1, nz=1)
+    clock = ft.VirtualClock()
+    link = fs.FakeLink()
+    p = ft.run_scan(link, ft.FakeTiltSensor(link, clock), cfg, "magnet_tilt", confirm=lambda *_: None,
+                    out=lambda *_: None, clock=clock, magnet="Underneath")
+    assert p.name.startswith("magnet_tilt_underneath_") and p.suffix == ".csv"
+    meta = json.loads(p.with_suffix(".meta.json").read_text())
+    assert meta["magnet"] == "Underneath" and meta["csv"] == p.name
+    assert ft.magnet_slug("under centre, N up") == "under-centre-n-up" and ft.magnet_slug("") == ""
+    # no --magnet: names as before
+    p2 = ft.run_scan(link, ft.FakeTiltSensor(link, clock), cfg, "bg_tilt", confirm=lambda *_: None,
+                     out=lambda *_: None, clock=clock)
+    assert p2.name.startswith("bg_tilt_2") and json.loads(p2.with_suffix(".meta.json").read_text())["magnet"] == ""

@@ -40,6 +40,7 @@ All of `field_scan.py`'s options work the same way. New ones:
 | `--settle-min` | Gyro mode: shortest wait, s | 0.5 |
 | `--settle` | Fixed wait, or in gyro mode the **longest** wait | 5.0 |
 | `--no-zero-gyro` | Don't zero the gyro at the park position before the scan | zero it |
+| `--magnet TEXT` | Where the magnet is, e.g. `underneath` or `none`. Goes in the file name (`<label>_<magnet>_<time>.csv`) and the `.meta.json` | not in the name |
 | `--algorithm` | Board's orientation filter for pitch/roll: `imu` (accelerometer + gyro), `ahrs` (also the magnetometer) or `none` | `imu` |
 
 Use `imu`, not `ahrs`. AHRS also steers by the magnetometer, which the magnet being
