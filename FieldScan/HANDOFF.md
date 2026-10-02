@@ -51,6 +51,7 @@ Panel with the coils off. The user hadn't confirmed doing this.
 | `run_field_scan.m` | Opens the magnetometer, then the robot. Asks before enabling (`<8><{"enable":0}>` means ENABLE; the logic is inverted). Parks the robot, then works through the serpentine grid from `Kinematics/scan_grid.m`. For each point: move, wait for `mv==0`, settle, average N samples, append a CSV row. Points the firmware reports as unreachable (`e=1`) are logged as NaN. Leaves the robot **enabled** at the end, because disabling lets the arms drop. |
 | `plot_field_map.m` | Field vectors coloured by \|B\|, \|B\| slices, and % deviation from the centre on the middle z plane. Optionally subtracts a coils-off baseline, matched to the data by position (0.1 mm). Plots in µT; CSVs are in gauss. Reads CSVs from both `field_scan.py` and `run_field_scan.m`. |
 | `compare_runs.m` | Magnet repeatability, see below |
+| `compare_positions.m` | Magnet repeatability at several magnet positions: groups `magP<k>_run<r>` CSVs, runs `compare_runs` (with `"Plot", false`) per position, summary table, magnet-field map per position, sigma strip plots. Not run in MATLAB. |
 | `make_demo_scan.m` | Fake Helmholtz-pair scan (Biot–Savart, R = 0.3 m, 50 A-turns) plus an Earth-field baseline, for trying the plots without hardware |
 | `README.md` | Setup and usage steps for the user |
 

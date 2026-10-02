@@ -114,6 +114,50 @@ R = compare_runs("data/magnet_run*.csv", "data/no_magnet_….csv");
 This reports the spread of |B| across runs and converts it to a position
 repeatability in mm (spread ÷ field gradient).
 
+### Magnet at several positions
+
+Repeat the magnet test with the magnet in several places, with a few runs at
+each place. Moving the magnet moves the strong gradient around the grid, so
+the repeatability figure covers more of the volume and doesn't depend on one
+magnet placement.
+
+1. Keep the grid, speed, settle time and correction exactly as in the first magnet
+   run so every scan matches `2026-10-02_dryrun1_no_magnet.csv`:
+   `--z -675 -625 3` (x and y stay at the default ±50 mm, 5 points).
+2. Fix the magnet down with tape or a printed holder, nothing ferrous, and
+   write down where it is. **Don't touch the magnet or the robot base between runs
+   at the same position.** Only move it when you start the next position.
+3. Name the runs `magP<position>_run<repeat>`:
+   ```
+   python field_scan.py --label magP1_run1 --z -675 -625 3 --note "magnet P1: <where>, coils off"
+   python field_scan.py --label magP1_run2 --z -675 -625 3 --note "magnet P1: <where>, coils off"
+   python field_scan.py --label magP1_run3 --z -675 -625 3 --note "magnet P1: <where>, coils off"
+   # move the magnet
+   python field_scan.py --label magP2_run1 --z -675 -625 3 --note "magnet P2: <where>, coils off"
+   ...
+   ```
+   Each run takes about 14 minutes (75 points), so 3 positions × 3 runs is about
+   2 hours 10 minutes.
+4. Finish with another magnet-absent scan (`--label no_magnet_end`). Comparing it with
+   the first one shows how much the background drifted over the session.
+5. In MATLAB:
+   ```matlab
+   S = compare_positions("data/magP*_run*.csv", "data/2026-10-02_dryrun1_no_magnet.csv", ...
+                         "Names", ["P1 near +x", "P2 ...", "P3 ..."]);
+   S.table      % one row per position: runs, peak magnet field and where, sigma_B, sigma_pos
+   S.pooled     % all positions together
+   ```
+   Figure 1 shows the magnet's field on each z layer for each position. Check that
+   the peak (×) moves when you move the magnet. Figure 2 shows sigma_B and sigma_pos
+   at every point, per position and pooled.
+   If the magnet hasn't moved since the first magnet run, add that run to
+   position 1 by giving the groups yourself:
+   ```matlab
+   S = compare_positions({["data/2026-10-02_dryrun1_magnet_20261002_180000.csv" "data/magP1_*.csv"], ...
+                          "data/magP2_*.csv", "data/magP3_*.csv"}, ...
+                         "data/2026-10-02_dryrun1_no_magnet.csv");
+   ```
+
 To try the plots without hardware:
 ```matlab
 [f, f0] = make_demo_scan(); plot_field_map(f, f0)

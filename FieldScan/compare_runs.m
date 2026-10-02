@@ -1,9 +1,11 @@
-function R = compare_runs(magnetFiles, noiseFile)
+function R = compare_runs(magnetFiles, noiseFile, varargin)
 % compare_runs — repeatability of a fixed reference magnet across repeated scans.
 %
 %   R = compare_runs(magnetFiles)              % magnetFiles: string array / cell of CSVs
 %   R = compare_runs("data/magnet_run*.csv")   % or a wildcard pattern
 %   R = compare_runs(magnetFiles, noiseFile)   % + a magnet-absent scan for the noise floor
+%   R = compare_runs(..., "Plot", false)       % numbers only, no figures
+%                                              % (compare_positions uses this)
 %
 % Run the same grid several times with the magnet fixed
 % (run_field_scan("magnet_run"+k)), plus one run without the magnet, then:
@@ -19,6 +21,12 @@ function R = compare_runs(magnetFiles, noiseFile)
 %
 % Figures: 1) sigma_B per point vs noise floor, 2) sigma_pos on the grid,
 % 3) histogram of sigma_pos. R is a struct of the numbers.
+
+p = inputParser;
+p.addParameter("Plot", true);
+p.parse(varargin{:});
+doPlot = p.Results.Plot;
+if nargin < 2, noiseFile = ""; end
 
 cfg = scan_config();
 
@@ -56,7 +64,7 @@ sigB(nValid < 2) = NaN;
 
 % --- sensor noise floor from the magnet-absent scan ---
 sigNoise = zeros(N, 1);
-haveNoise = nargin > 1 && strlength(string(noiseFile)) > 0;
+haveNoise = strlength(string(noiseFile)) > 0;
 if haveNoise
     T0 = readtable(noiseFile);
     P0 = [T0.x_mm T0.y_mm T0.z_mm];
@@ -114,6 +122,7 @@ fprintf("Note: sigma_B also contains field drift between runs (Earth/coil/temper
 fprintf("so sigma_pos is an upper bound on the robot's true position repeatability.\n");
 
 % --- plots ---
+if ~doPlot, return; end
 figure('Name', "Repeatability: sigma_B");
 plot(1:N, sigB * 1e5, 'o-'); hold on     % 1 G = 1e5 nT
 if haveNoise, plot(1:N, sigNoise * 1e5, 's-'); end
