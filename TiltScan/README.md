@@ -18,7 +18,8 @@ position correction, and replaces only the per-point reading and the CSV.
 | `field_scan_tilt.py` | Runs the scan: move, settle, read field + acceleration + gyro together, one CSV row per point |
 | `tilt_correct.m` | Tilt per point from the accelerometer; field rotated back to a reference orientation; optional `_tiltcorr.csv` |
 | `plot_tilt.m` | Tilt map per z layer, tilt vs distance off-axis, gyro rate and settle time per point |
-| `test_field_scan_tilt.py`, `test_tilt_correct.m` | Checks with a simulated tilting sensor (no hardware) |
+| `compare_tilt_runs.m` | Repeated runs, raw vs tilt-corrected: field spread over runs, tilt spread, dipole fit residual per run |
+| `test_field_scan_tilt.py`, `test_tilt_correct.m`, `test_compare_tilt_runs.m` | Checks with a simulated tilting sensor (no hardware) |
 
 ## Running a scan
 
@@ -93,6 +94,19 @@ tilt_correct("data/magnet_tilt_….csv", "Reference", "data/no_magnet_tilt_….c
 fit_dipole("data/magnet_tilt_…_tiltcorr.csv", "data/no_magnet_tilt_…_tiltcorr.csv")
 plot_field_layers("data/magnet_tilt_…_tiltcorr.csv", "data/no_magnet_tilt_…_tiltcorr.csv")
 ```
+
+**Repeated runs, raw vs tilt-corrected** (does all of the above in one go):
+```matlab
+C = compare_tilt_runs("data/magnet_tilt_*.csv", "data/bg_tilt_….csv");          % prints a table
+C = compare_tilt_runs("data/magnet_tilt_*.csv", "data/bg_tilt_….csv", "Save", true)
+```
+It tilt-corrects every run and the background to the background's centre, then
+compares, raw against corrected: the spread over runs of the field **vector** at
+each point (|B| alone can't show tilt, since a rotation doesn't change it) and of the
+magnet's own field |B − B_bg|; the spread of the tilt itself; and a dipole fit per
+run (residual, position, moment, and their spread). `_tiltcorr.csv` files matched
+by the wildcard are skipped. Expect what's left after correction to be set partly by
+the accelerometer's noise, which goes straight into the rotation.
 
 The `_tiltcorr.csv` has the corrected field in `Bx_G..Bz_G` (raw kept in
 `Bx_raw_G..Bz_raw_G`, plus `tilt_deg`), so `fit_dipole`, `plot_field_layers` and
