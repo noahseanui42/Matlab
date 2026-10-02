@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 640" width="900" height="640">
+<style>.h{font:600 15px sans-serif;fill:#111}.s{font:12px sans-serif;fill:#555}.d{font:600 13px sans-serif;fill:#b00}
+.pl{fill:#eef3fb;stroke:#345;stroke-width:2}.bj{fill:#e8a020;stroke:#333}.ax{stroke:#e8a020;stroke-width:1.5;stroke-dasharray:5 3}
+.ct{fill:#111}.dm{stroke:#b00;stroke-width:1.5}.n{font:13px sans-serif;fill:#222}</style>
+<rect width="900" height="640" fill="#fff"/>
+<text x="450" y="28" text-anchor="middle" class="h" font-size="18">Effector platform, top view (my reconstruction, not measured by me)</text>
+<text x="230" y="55" text-anchor="middle" class="h">What the model assumes</text><text x="230" y="73" text-anchor="middle" class="s">ball joints at the triangle VERTICES</text>
+<polygon points="230.0,423.2 80.0,163.4 380.0,163.4" class="pl"/>
+<circle cx="195.0" cy="423.2" r="5" class="bj"/>
+<circle cx="265.0" cy="423.2" r="5" class="bj"/>
+<line x1="290.0" y1="423.2" x2="170.0" y2="423.2" class="ax"/>
+<text x="230.0" y="503.2" text-anchor="middle" class="s">arm 1</text>
+<circle cx="397.5" cy="193.7" r="5" class="bj"/>
+<circle cx="362.5" cy="133.1" r="5" class="bj"/>
+<line x1="350.0" y1="111.4" x2="410.0" y2="215.4" class="ax"/>
+<text x="449.3" y="123.4" text-anchor="middle" class="s">arm 2</text>
+<circle cx="97.5" cy="133.1" r="5" class="bj"/>
+<circle cx="62.5" cy="193.7" r="5" class="bj"/>
+<line x1="50.0" y1="215.4" x2="110.0" y2="111.4" class="ax"/>
+<text x="10.7" y="123.4" text-anchor="middle" class="s">arm 3</text>
+<circle cx="230" cy="250" r="4" class="ct"/>
+<line x1="270" y1="250" x2="270" y2="423.2" class="dm"/><text x="276" y="336.6" class="d">86.6 mm</text>
+<line x1="230" y1="250" x2="270" y2="250" class="dm"/>
+<text x="670" y="55" text-anchor="middle" class="h">What your measurement suggests</text><text x="670" y="73" text-anchor="middle" class="s">ball-joint axes at the triangle SIDE MIDPOINTS</text>
+<polygon points="670.0,76.8 820.0,336.6 520.0,336.6" class="pl"/>
+<circle cx="635.0" cy="336.6" r="5" class="bj"/>
+<circle cx="705.0" cy="336.6" r="5" class="bj"/>
+<line x1="730.0" y1="336.6" x2="610.0" y2="336.6" class="ax"/>
+<text x="670.0" y="416.6" text-anchor="middle" class="s">arm 1</text>
+<circle cx="762.5" cy="237.0" r="5" class="bj"/>
+<circle cx="727.5" cy="176.4" r="5" class="bj"/>
+<line x1="715.0" y1="154.7" x2="775.0" y2="258.7" class="ax"/>
+<text x="814.3" y="166.7" text-anchor="middle" class="s">arm 2</text>
+<circle cx="612.5" cy="176.4" r="5" class="bj"/>
+<circle cx="577.5" cy="237.0" r="5" class="bj"/>
+<line x1="565.0" y1="258.7" x2="625.0" y2="154.7" class="ax"/>
+<text x="525.7" y="166.7" text-anchor="middle" class="s">arm 3</text>
+<circle cx="670" cy="250" r="4" class="ct"/>
+<line x1="710" y1="250" x2="710" y2="336.6" class="dm"/><text x="716" y="293.3" class="d">43.3 mm</text>
+<line x1="670" y1="250" x2="710" y2="250" class="dm"/>
+<text x="450" y="500" text-anchor="middle" class="n">Both platforms: equilateral triangle, side 150 mm (blue). Yellow = forearm ball-joint pairs (35 mm rod spacing), dashed = ball-joint axis.</text>
+<text x="450" y="530" text-anchor="middle" class="n">Model: platform radius up = SP/√3 = 86.6 mm.  Your part: inradius = 150/(2√3) = 43.3 mm ≈ your ~44 mm.</text>
+<text x="450" y="560" text-anchor="middle" class="n">Base is already mid-side style (wb = 50.5 mm, matches). Model offset a = 50.5 − 86.6 = −36 mm, real ≈ 50.5 − 43.3 = +7 mm.</text>
+<text x="450" y="595" text-anchor="middle" class="s">Note: arm directions and joint layout are my guess. Please check them against the real plate.</text>
+</svg>

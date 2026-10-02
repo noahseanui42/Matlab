@@ -29,6 +29,7 @@ void Motion::disable() {
   running_ = false;
   stopRequested_ = false;
   pendingValid_ = false;
+  approachPending_ = false;
   active_.linear = false;
 }
 
@@ -44,6 +45,58 @@ bool Motion::solveAndBuildTarget(const float xyz[3], int mode_i, int v, int prog
   out.v = v;
   out.programIndex = programIndex;
   return true;
+}
+
+// Decides, from the current commanded pose, whether t needs the upward final
+// approach, and if so builds the dip leg. Falls back to a direct move (false)
+// when no bicep would finish moving down, when the floor leaves no room to
+// dip, when the dip point is unreachable, or when rising from it wouldn't
+// lift every bicep (so the rise couldn't take up the backlash anyway).
+bool Motion::planApproach(const MoveTarget &t, MoveTarget &dip) const {
+  if (!approachEnabled_ || APPROACH_DZ_MM <= 0.0f) {
+    return false;
+  }
+  bool anyDown = false;
+  for (int i = 0; i < 3; i++) {
+    if (t.theta1[i] - theta_[i] > APPROACH_TRIGGER_DEG) anyDown = true;
+  }
+  if (!anyDown) {
+    return false;
+  }
+  float dipZ = t.xyz1[2] - APPROACH_DZ_MM;
+  if (dipZ < APPROACH_Z_FLOOR_MM) dipZ = APPROACH_Z_FLOOR_MM;
+  if (dipZ > t.xyz1[2] - 1.0f) {
+    return false;  // target is at (or below) the floor: nowhere to dip
+  }
+  float p[3] = {t.xyz1[0], t.xyz1[1], dipZ};
+  if (!ik(p, dip.theta1)) {
+    return false;
+  }
+  for (int i = 0; i < 3; i++) {
+    if (dip.theta1[i] <= t.theta1[i]) return false;
+  }
+  dip.linear = t.linear;
+  dip.xyz1[0] = p[0];
+  dip.xyz1[1] = p[1];
+  dip.xyz1[2] = p[2];
+  dip.v = t.v;
+  dip.programIndex = t.programIndex;
+  return true;
+}
+
+// Starts a newly accepted target: straight there, or via the dip leg with
+// the vertical rise queued in approachFinal_ (run by finishMove()).
+void Motion::startMove(const MoveTarget &t, uint32_t nowMs) {
+  MoveTarget dip;
+  if (planApproach(t, dip)) {
+    approachFinal_ = t;
+    approachFinal_.linear = true;  // rise straight up, not a joint-space arc
+    approachPending_ = true;
+    beginMove(dip, nowMs);
+    return;
+  }
+  approachPending_ = false;
+  beginMove(t, nowMs);
 }
 
 void Motion::beginMove(const MoveTarget &t, uint32_t nowMs) {
@@ -99,7 +152,7 @@ void Motion::beginProgramPoint(int idx, uint32_t nowMs) {
     pendingValid_ = true;
     return;
   }
-  beginMove(t, nowMs);
+  startMove(t, nowMs);
 }
 
 void Motion::acceptManualMove(const MovePoint &pt, uint32_t nowMs) {
@@ -121,7 +174,7 @@ void Motion::acceptManualMove(const MovePoint &pt, uint32_t nowMs) {
     pendingValid_ = true;
     return;
   }
-  beginMove(t, nowMs);
+  startMove(t, nowMs);
 }
 
 void Motion::acceptProgramPoint(const MovePoint &pt) {
@@ -180,6 +233,14 @@ void Motion::advanceProgram(int justFinishedIdx, uint32_t nowMs) {
 void Motion::finishMove(uint32_t nowMs) {
   int justFinishedIdx = active_.programIndex;
 
+  // The dip leg of an upward approach just ended: the rise is part of the
+  // same move, so it runs before any stop, dwell or pending move.
+  if (approachPending_) {
+    approachPending_ = false;
+    beginMove(approachFinal_, nowMs);
+    return;
+  }
+
   if (stopRequested_) {
     running_ = false;
     stopRequested_ = false;
@@ -199,7 +260,7 @@ void Motion::finishMove(uint32_t nowMs) {
   if (pendingValid_) {
     MoveTarget t = pending_;
     pendingValid_ = false;
-    beginMove(t, nowMs);
+    startMove(t, nowMs);
     return;
   }
 
@@ -225,7 +286,7 @@ void Motion::endDwell(uint32_t nowMs) {
   if (pendingValid_) {
     MoveTarget t = pending_;
     pendingValid_ = false;
-    beginMove(t, nowMs);
+    startMove(t, nowMs);
     return;
   }
 
@@ -263,6 +324,7 @@ void Motion::tick(uint32_t nowMs) {
     float thetaCandidate[3];
     if (!ik(p, thetaCandidate)) {
       error_ = 2;
+      approachPending_ = false;  // don't rise from wherever this stopped
       finishMove(nowMs);  // holds the last good theta_/xyz_ (untouched here)
       return;
     }
