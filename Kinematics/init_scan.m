@@ -1,10 +1,14 @@
 % init_scan.m — run before opening/simulating S01_Scan_Pipeline
 
-% --- geometry (locked) ---
+% Legacy offline pipeline: the robot is driven by engr489-firmware, and
+% engr489-firmware/delta_servo/config.h is the source of truth for geometry
+% and servo calibration. Geometry below is kept in line with it.
+
+% --- geometry (matches delta_servo/config.h) ---
 sb = 175;   % base triangle side, mm
-sp = 150;   % platform triangle side, mm
-L1 = 180;   % proximal (bicep), mm
-L2 = 600;   % distal (forearm), mm   <-- 600 vs 700 still unresolved
+sp = 75;    % platform triangle side through the ball-joint centres, mm
+L1 = 177;   % proximal (bicep), mm, measured
+L2 = 625;   % distal (forearm), mm, confirmed
 
 % --- scan volume ---
 xr = [-100 100];
@@ -25,7 +29,7 @@ sgn     = [1 -1 -1];           % direction per axis <-- CONFIRM THESE Should be 
 % --- validation limits ---
 artic_max = 13;               % SIL6T/K rod end misalignment limit, deg
 rod_tol   = 1e-6;             % mm, forearm length residual
-th_lim    = [-45 90];         % deg, from pw limits via k_us — recompute
+th_lim    = [-20 70];         % deg, confirmed with the full 3-arm assembly (config.h)
 
 % --- nominal ball-stud axes (pre-angled to volume centre) ---
 nhat = rod_axes_at([0 0 -600], sb, sp, L1, L2);

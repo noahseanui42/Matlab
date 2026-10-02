@@ -81,11 +81,11 @@ coefficients in `delta_app/pose_correction_hybrid.json`).
   grid goes outside that box. Repeatability is 2–2.5 mm. About 5 mm remains at the
   box centre at z −650 from platform tilt, which no servo-angle correction can remove.
   The calibration notes are in the ENGR489 report repo, `calibration/2026-10-01_*.md`.
-- **Needs the calibrated firmware** (branch `claude/amazing-lovelace-onixrv`: geometry
-  SB 175, SP 75, L_UP 177, arm remap, refitted servo calibration, upward approach).
-  This branch's `robot_config.py` and `delta_servo/` are older (SP 150, L_UP 180, no
-  remap); the script warns about that and the correction uses the calibrated
-  geometry from its JSON file.
+- **Uses the calibrated firmware** (geometry SB 175, SP 75, L_UP 177, arm remap
+  `GEOM_TO_PHYS = [2, 0, 1]`, servo calibration refitted 2026-09-30, upward approach).
+  `delta_servo/config.h` and `delta_app/robot_config.py` hold these values; flash
+  `delta_servo/` from this repo. The script warns if `robot_config.py` and the
+  correction's JSON disagree.
 - `x_mm, y_mm, z_mm` stay the **target** (where the reading belongs); the coordinates
   actually sent are in `sent_x_mm, sent_y_mm, sent_z_mm`. The `.meta.json` records
   the correction and its coefficients.

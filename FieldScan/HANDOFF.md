@@ -138,10 +138,10 @@ Not run in MATLAB.
 
 ## Known inconsistencies elsewhere in the repo (not fixed)
 
-- `Kinematics/init_scan.m` still has `L2 = 600` with the comment "600 vs 700
-  unresolved". The firmware and README confirm the forearm is **625 mm**.
-  `sb=175`, `sp=150` match the firmware. FieldScan doesn't use `init_scan.m`;
-  it only calls `scan_grid.m`.
+- `Kinematics/` and `Simulink/` are the older offline MATLAB pipeline.
+  FieldScan doesn't use `init_scan.m`; it only calls `scan_grid.m`.
+  `init_scan.m`'s geometry now matches `delta_servo/config.h`, but its servo
+  values are the old Simulink model's, not the firmware's.
 - Reachable volume, from the firmware README: on-axis z ≈ −550 to −793 mm
   (the z-limit is −800). The default grid is x, y ±50 and z −600 to −700
   (probe coordinates), 5×5×5. The firmware rejects unreachable points itself.
@@ -149,7 +149,7 @@ Not run in MATLAB.
   GUI Mac and may be different on the MacBook Pro. Use
   `serialportlist("available")` to find the port.
 
-## Position correction (branch claude/field-scan-pose-correction, not merged)
+## Position correction
 
 `field_scan.py --correction hybrid` aims each move past its target by the servos'
 predicted shortfall (`delta_app/pose_correction.py`, `pose_correction_hybrid.json`).
@@ -157,11 +157,9 @@ Calibrated and validated in the ENGR489 report repo (`calibration/2026-10-01_*.m
 corner error about 19 → 2.3 mm rms inside x ±50, y ±150, z −600 to −700. Default is
 `off`. CSV adds `sent_x_mm, sent_y_mm, sent_z_mm`; the first 12 columns are unchanged.
 
-**Geometry on this branch is the old master version.** `robot_config.py` and
-`delta_servo/config.h` here have SP 150, L_UP 180, no arm remap, the first-bring-up
-servo calibration and no upward approach. The robot was calibrated on
-`claude/amazing-lovelace-onixrv` (SP 75, L_UP 177, `GEOM_TO_PHYS = [2, 0, 1]`, refitted
-CAL, upward approach). Flash that firmware, not this branch's `delta_servo/`. The
-correction carries the calibrated geometry in its JSON and `field_scan.py` warns when
-`robot_config.py` differs; the delta app on this branch uses the old values for its
-own checks and plot.
+The firmware and `robot_config.py` in this repo are the calibrated version the
+robot runs (SP 75, L_UP 177, `GEOM_TO_PHYS = [2, 0, 1]`, CAL refitted 2026-09-30,
+upward approach). The scans from 2026-10-02 were taken with it: their logged joint
+angles match this geometry's IK to 0.01°. Their `.meta.json` files show a
+`geometry_mismatch_with_robot_config` entry because the scanning PC's copy of
+`robot_config.py` was still the old one at the time.
