@@ -1,7 +1,7 @@
 """Field scan with tilt logging: the same scan as delta_app/field_scan.py, plus the
 1044's pitch and roll (tilt) and gyroscope (is the probe still?) at every point.
 
-    python TiltScan/field_scan_tilt.py --label magnet_tilt --note "strong magnet"
+    python TiltScan/field_scan_tilt.py --label magnet_tilt --magnet underneath --note "strong magnet"
     python TiltScan/field_scan_tilt.py --label magnet_tilt --correction hybrid
     python TiltScan/field_scan_tilt.py --label t --gyro-settle 0.5   # wait for the gyro, not a fixed time
     python TiltScan/field_scan_tilt.py --simulate --label demo        # no hardware
@@ -49,6 +49,7 @@ import csv
 import json
 import math
 import random
+import re
 import statistics
 import sys
 import threading
@@ -301,8 +302,13 @@ def read_point(sensor, n, dt_s, clock=Clock):
 # --------------------------------------------------------------------------
 # Scan (field_scan.run_scan with the tilt reading and columns)
 # --------------------------------------------------------------------------
+def magnet_slug(text):
+    """'Underneath' -> 'underneath', 'under centre, N up' -> 'under-centre-n-up': safe in a file name."""
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
 def run_scan(link, sensor, cfg, label="scan", note="", coil_current_A=None,
-             confirm=input, out=print, clock=Clock):
+             confirm=input, out=print, clock=Clock, magnet=""):
     pts = fs.scan_grid(cfg.xr, cfg.yr, cfg.zr, cfg.nx, cfg.ny, cfg.nz)
     n = len(pts)
     corr = fs.load_correction(cfg)
@@ -322,7 +328,8 @@ def run_scan(link, sensor, cfg, label="scan", note="", coil_current_A=None,
     out_dir = Path(cfg.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = out_dir / f"{label}_{stamp}.csv"
+    slug = magnet_slug(magnet)                    # magnet position goes in the name: <label>_<magnet>_<time>
+    csv_path = out_dir / (f"{label}_{slug}_{stamp}.csv" if slug else f"{label}_{stamp}.csv")
     meta_path = csv_path.with_suffix(".meta.json")
 
     fs.ensure_enabled(link, confirm)
@@ -339,7 +346,8 @@ def run_scan(link, sensor, cfg, label="scan", note="", coil_current_A=None,
         gyro_zeroed = True
 
     meta = {
-        "label": label, "note": note, "started": datetime.now().isoformat(timespec="seconds"),
+        "label": label, "magnet": magnet, "note": note,
+        "started": datetime.now().isoformat(timespec="seconds"),
         "coil_current_A": coil_current_A, "n_points": n, "csv": csv_path.name,
         "script": "TiltScan/field_scan_tilt.py",
         "frame": "sensor axes, raw: B in gauss, acceleration in g, angular rate in deg/s, "
@@ -525,6 +533,8 @@ def main(argv=None):
     cfg = TiltScanConfig()
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--label", default="scan")
+    ap.add_argument("--magnet", default="",
+                    help="where the magnet is, e.g. 'underneath' or 'none'; goes in the file name and metadata")
     ap.add_argument("--note", default="", help="free text stored in the metadata, e.g. 'magnet at (200, 0, -720)'")
     ap.add_argument("--coil-current", type=float, default=None, help="coil current (A), stored in metadata")
     ap.add_argument("--port", default=cfg.port)
@@ -572,7 +582,8 @@ def main(argv=None):
         link = fs.DeltaLink(cfg.port)
         confirm = input
     try:
-        run_scan(link, sensor, cfg, a.label, a.note, a.coil_current, confirm=confirm, clock=clock)
+        run_scan(link, sensor, cfg, a.label, a.note, a.coil_current, confirm=confirm, clock=clock,
+                 magnet=a.magnet)
     except fs.ScanError as e:
         sys.exit(f"ERROR: {e}")
     finally:
