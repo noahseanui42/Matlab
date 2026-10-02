@@ -319,7 +319,7 @@ def run_scan(link, mag, cfg, label="scan", note="", coil_current_A=None,
             out("WARNING: robot_config.py geometry differs from the geometry the correction was "
                 f"calibrated with {mismatch} (robot_config value, calibrated value). The correction uses "
                 "the calibrated geometry. Make sure the robot runs the calibrated firmware "
-                "(branch claude/amazing-lovelace-onixrv), not this branch's delta_servo.")
+                "(branch claude/amazing-lovelace-onixrv).")
     if n_outside:
         out(f"WARNING: {n_outside} of {n} points are outside the box the {cfg.correction} "
             f"correction was validated in ({corr.valid_box}); it is extrapolating there.")
@@ -341,8 +341,8 @@ def run_scan(link, mag, cfg, label="scan", note="", coil_current_A=None,
         "frame": "sensor axes, gauss, raw (apply R_sensor_to_robot in MATLAB)",
         "config": asdict(cfg), "sensor": mag.info() if hasattr(mag, "info") else {},
         # The firmware does the IK, so the geometry that matters is the flashed one.
-        # Record the calibrated firmware's (as the correction does), not this
-        # branch's robot_config.py, which still has the older master values.
+        # Record the calibrated firmware's (as the correction does); robot_config.py
+        # matches it now, and the warning above says if it ever stops matching.
         "geometry": CALIBRATED_GEOMETRY,
         "correction": dict(corr.info(), points_outside_valid_box=n_outside,
                            geometry_mismatch_with_robot_config={k: list(v) for k, v in mismatch.items()})

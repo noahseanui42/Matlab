@@ -157,11 +157,9 @@ Calibrated and validated in the ENGR489 report repo (`calibration/2026-10-01_*.m
 corner error about 19 → 2.3 mm rms inside x ±50, y ±150, z −600 to −700. Default is
 `off`. CSV adds `sent_x_mm, sent_y_mm, sent_z_mm`; the first 12 columns are unchanged.
 
-**Geometry on this branch is the old master version.** `robot_config.py` and
-`delta_servo/config.h` here have SP 150, L_UP 180, no arm remap, the first-bring-up
-servo calibration and no upward approach. The robot was calibrated on
+**Geometry: the calibrated firmware is merged in.** The robot was calibrated on
 `claude/amazing-lovelace-onixrv` (SP 75, L_UP 177, `GEOM_TO_PHYS = [2, 0, 1]`, refitted
-CAL, upward approach). Flash that firmware, not this branch's `delta_servo/`. The
-correction carries the calibrated geometry in its JSON and `field_scan.py` warns when
-`robot_config.py` differs; the delta app on this branch uses the old values for its
-own checks and plot.
+CAL, upward approach). That branch is merged into `claude/admiring-mayer-i8z1mr`, so
+`robot_config.py`, `delta_servo/config.h` and the correction's JSON agree and the delta
+app uses the same geometry. `field_scan.py` still warns if `robot_config.py` and the
+JSON ever differ.

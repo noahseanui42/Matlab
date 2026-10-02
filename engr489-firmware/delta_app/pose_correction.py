@@ -23,9 +23,9 @@ y +-150, z -600..-700 (probe): corner error about 19 -> 2.3 mm rms; box spans
 GEOMETRY: the model only holds for the geometry it was fitted with, so the
 geometry travels with the coefficients in the JSON file (SB 175, SP 75, L_UP 177,
 L_LO 625, arm remap GEOM_TO_PHYS [2, 0, 1]; the calibrated firmware from branch
-claude/amazing-lovelace-onixrv). It is deliberately NOT read from robot_config.py:
-on this branch robot_config.py and delta_servo/config.h are the older master
-values (SP 150, L_UP 180, no remap). field_scan.py warns when they differ.
+claude/amazing-lovelace-onixrv, now merged). It is deliberately NOT read from
+robot_config.py, so a later geometry change can't silently invalidate the fit;
+field_scan.py warns if robot_config.py stops matching it.
 The TCP offset comes from the scan config.
 """
 import json
