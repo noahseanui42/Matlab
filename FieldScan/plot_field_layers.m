@@ -37,6 +37,8 @@ p.addParameter("Side", "xz");      % side views: "xz" (one panel per y) or "yz" 
 p.parse(varargin{:});
 opt = p.Results;
 if nargin < 2, baselineFile = ''; end
+dataFile = resolve_path(dataFile);
+baselineFile = resolve_path(baselineFile);
 
 R = opt.R;
 if isempty(R)
@@ -290,4 +292,17 @@ else
     annotation("textbox", [0 0.94 1 0.05], "String", s, "EdgeColor", "none", ...
         "HorizontalAlignment", "center", "FontSize", 12, "Interpreter", "none");
 end
+end
+
+
+function f = resolve_path(f)
+% Accept a path relative to the current folder or to this script's folder
+% (FieldScan), so "data/....csv" works from anywhere.
+f = char(f);
+if isempty(f) || isfile(f), return; end
+here = fileparts(mfilename("fullpath"));
+alt = fullfile(here, f);
+if isfile(alt), f = alt; return; end
+error("Cannot find %s\nLooked in %s and in %s.\nList the scans with:  dir(fullfile('%s', 'data'))", ...
+    f, pwd, here, here);
 end
