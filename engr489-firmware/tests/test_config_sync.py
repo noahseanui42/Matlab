@@ -72,3 +72,22 @@ def test_pin_mapping_matches_handoff_default():
     text = _read_config_h()
     cal = _cal_entries(text)
     assert [c["pin"] for c in cal] == [9, 10, 11]
+
+
+def _geom_to_phys(text):
+    m = re.search(r"constexpr int GEOM_TO_PHYS\[3\]\s*=\s*\{([^}]*)\};", text)
+    assert m, "GEOM_TO_PHYS not found in config.h"
+    return [int(v.strip()) for v in m.group(1).split(",")]
+
+
+def test_geom_to_phys_matches():
+    text = _read_config_h()
+    assert _geom_to_phys(text) == robot_config.GEOM_TO_PHYS
+
+
+def test_approach_floor_matches_gui_z_limit():
+    # The firmware has no TCP, so its dip floor (platform centre) must equal
+    # the GUI's default probe z limit minus the TCP z offset.
+    text = _read_config_h()
+    floor = _constexpr_float(text, "APPROACH_Z_FLOOR_MM")
+    assert floor == robot_config.Z_LIMIT_DEFAULT - robot_config.TCP_DEFAULT[2]

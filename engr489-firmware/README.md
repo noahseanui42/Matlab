@@ -50,12 +50,74 @@ engr489-firmware/
 headers) so they're unit-testable on the host; only `delta_servo.ino` may
 touch `Servo`, `Serial` or `millis()`.
 
+## Architecture
+
+```
+┌───────────────────────── Mac (Python, delta_app/) ─────────────────────────┐
+│                                                                            │
+│  main.py ──► deltagui.py (Tkinter GUI)                                     │
+│               • jog / go-to-point / program list / wait times              │
+│               • start, stop, enable, port field                            │
+│               • reads status stream → 3D plot, angle readouts              │
+│                     │                          ▲                           │
+│                     ▼                          │                           │
+│             deltarobot.py  (IK / FPK, workspace checks)                    │
+│                     ▲                                                      │
+│                     │ SB, SP, L_UP, L_LO, ANGLE_LIMITS_DEG, Z_MAX,         │
+│              robot_config.py   TCP_DEFAULT, SERIAL_PORT_DEFAULT, DTR       │
+└─────────────────────┬──────────────────────────▲───────────────────────────┘
+                      │ USB CDC ("115200")       │ status line every 20 ms
+                      │ <mode><{json}><#> frames │ (paused while rxBusy):
+                      │ 2 move, 1 program point, │ {"deg":[..],"mv","run",
+                      │ 3 wait, 0 start, 8 enable│  "en","e"}  + "OK" replies
+┌─────────────────────▼──────────────────────────┴───────────────────────────┐
+│        Arduino UNO R4 Minima  (delta_servo/)                               │
+│                                                                            │
+│  delta_servo.ino  loop():                                                  │
+│    1. drain Serial ──► protocol.cpp (frame parser)                         │
+│                          callbacks: onMove, onProgramPoint, onFunc(wait),  │
+│                          onStart, onEnable, onJsonError                    │
+│                               │                                            │
+│                               ▼                                            │
+│         motion.cpp  start of each move: ik(target) → θ1 (fail → e=1)       │
+│           (manual move: on receipt; program point: when it's reached)      │
+│                                                                            │
+│    2. every TICK_MS (20 ms): motion.tick()                                 │
+│         DISABLED / IDLE → MOVING → DWELL → next program point              │
+│         smoothstep s(u) = 3u² − 2u³                                        │
+│           joint mode:  θ = θ0 + s·(θ1 − θ0)        (no IK per tick)         │
+│           linear mode: p = xyz0 + s·(xyz1 − xyz0) → ik(p) every tick       │
+│                        (IK fails mid-path → stop, e=2)                     │
+│         kinematics.cpp: closed-form IK, CAL[i].min_deg/max_deg limits      │
+│       then writeServos():                                                  │
+│         angleToUs: us = centre_us + dir·us_per_deg·θ                       │
+│                    clamped to US_MIN..US_MAX = 830–2170 µs (hit → e=5)     │
+│         Servo.writeMicroseconds ──► D9 / D10 / D11 (only when enabled)     │
+│                                                                            │
+│    3. every STREAM_MS (20 ms), unless rxBusy: printStatusLine()            │
+│                                                                            │
+│  config.h: SB/SP/L_UP/L_LO, CAL[] per-servo table, US_MIN/MAX, timing,     │
+│            speeds (kept in sync with robot_config.py by test_config_sync)  │
+└────────────────────────────────────────────────────────────────────────────┘
+                      │ PWM pulses
+                      ▼
+        servo 1 (D9)   servo 2 (D10)   servo 3 (D11)
+                      │
+          delta arms → effector plate → probe (TCP 21 mm below)
+```
+
+The firmware works in effector-centre coordinates only; the GUI applies the
+TCP offset before sending a move.
+
 ## Assumptions made (HANDOFF §4 answers)
 
 These were confirmed with the user before implementation:
 
 1. **Geometry convention:** `SB`/`SP` are equilateral-triangle **side**
-   lengths through the joint centres (not centre-to-axis radii).
+   lengths through the joint centres (not centre-to-axis radii). `SB` = 175 mm
+   (bicep pivots, 50.5 mm inradius, measured); `SP` = **75 mm**, the inner
+   triangle through the forearm ball joints on the 150 mm platform (43.3 mm
+   circumradius), not the 150 mm outline.
 2. **Forearm length:** **625 mm** (not the 600/700 mm the planning doc had
    flagged as unresolved).
 3. **Servo-to-arm mapping:** D9 = arm 1 (on the −y axis), D10 = arm 2,
@@ -86,12 +148,16 @@ These were confirmed with the user before implementation:
 
    | Arm | Pin | centre_us | us_per_deg | dir | min_deg | max_deg |
    |---|---|---|---|---|---|---|
-   | 1 | D9 | 1460 | 11.8231 | +1 | −20.0 | 70.0 |
-   | 2 | D10 | 1385 | 10.0481 | +1 | −20.0 | 70.0 |
-   | 3 | D11 | 1410 | 10.5544 | +1 | −20.0 | 70.0 |
+   | 1 | D9 | 1456\* | 9.8315\* | +1 | −20.0 | 70.0 |
+   | 2 | D10 | 1373\* | 9.7664\* | +1 | −20.0 | 70.0 |
+   | 3 | D11 | 1393\* | 9.6658\* | +1 | −20.0 | 70.0 |
 
-   `centre_us`/`us_per_deg`/`dir` are still per-arm (from the single-arm
-   pass — that part of the measurement isn't affected by plate sag); only
+   \* Refit 2026-09-30 from an assembled on-axis sweep measured with a
+   digital protractor on each bicep (`tools/servo_sweep/sweep_2026-09-30_up.csv`,
+   notes in `tools/servo_sweep/CALIBRATION_LOG.md`). Before: D9 1460 / 11.8231,
+   D10 1350 / 9.51 (ruler re-sweep 2026-09-29), D11 1410 / 10.5544.
+
+   `centre_us`/`us_per_deg` now come from the assembled sweep above;
    `min_deg`/`max_deg` came from the full-assembly recheck.
 
 ### Reachability finding
@@ -99,7 +165,7 @@ These were confirmed with the user before implementation:
 With the corrected full-assembly limits (−20° to 70°), the reachable
 envelope is **much closer to the project's z ≈ −450 to −750 mm scan
 target** than either earlier estimate. On-axis (x=y=0), the workspace now
-spans roughly **z≈−550mm to z≈−793mm** — covering the entire deep half of
+spans roughly **z≈−540mm to z≈−788mm** — covering the entire deep half of
 the target range and then some, though still about 100mm short at the
 shallow end (−450 to −550mm remains unreachable; θ=−20° bottoms out around
 z=−550mm). Off-axis, a broad grid (x,y∈[−150,150]mm, z∈[−790,−550]mm, 25mm
@@ -107,9 +173,57 @@ steps) has ~89% of points reachable (1501/1690).
 
 If the shallow 100mm matters for the coil measurement plan, it's worth
 re-probing whether −20° really is the safe floor or was itself set with
-some margin to spare — otherwise, treat −550..−793mm as the real scan
+some margin to spare — otherwise, treat −540..−788mm as the real scan
 volume for this build. `tests/test_kinematics.py`'s regression values and
 grid are scoped to this range.
+
+### Pen-holder end effector (positioning accuracy test)
+
+For bench testing positioning accuracy without the coil, the magnetometer
+probe is swapped for a 3D-printed pen holder that clamps a whiteboard
+marker, so a scan can mark each commanded point on a sheet of paper and the
+marks can be measured against the intended grid.
+
+- The holder's clamp bore is deliberately oversized for the marker
+  currently on hand, so a second printed adapter/insert can take up the
+  slack if the marker is swapped later — the bore itself doesn't need to
+  change between pens.
+- **TCP offset not yet updated for this tool.** `TCP_DEFAULT = (0, 0, −21)`
+  mm in `delta_app/robot_config.py` (HANDOFF §4 Q4, above) is the probe's
+  tip offset below the effector's ball-joint-axis centre, not the pen's.
+  The pen holder almost certainly has a different tip offset, and using the
+  probe's TCP with the pen will shift every marked point on the paper by
+  the difference between the two. Before trusting the marking test's
+  results, measure the pen holder's own offset (ball-joint-axis centre down
+  to the marker tip, with the marker seated as it will be for the test) and
+  either swap in a pen-specific TCP constant or update `TCP_DEFAULT` for
+  the duration of the test.
+- Since this runs on the bench outside the coil, the pen holder isn't bound
+  by the project's non-magnetic-material rule for parts used inside the
+  coil — normal fasteners are fine here.
+- **Base plate orientation found rotated 120° from the IK model's
+  assumption.** Running the 9-point marking test with the reference paper
+  edge aligned to physical Arm 1 produced marks rotated a clean 120° from
+  their targets (arms are 120° apart, so this is a discrete mismatch, not a
+  calibration drift) — physical Arm 3 (D11) turned out to be the one
+  actually sitting at the position `kinematics.cpp`'s closed-form IK calls
+  "-y axis" (index 0), not physical Arm 1 (D9). The base plate's extra
+  mounting-hole options (built in for flexibility, same reasoning as the
+  pen holder's oversized bore above) meant the arms were bolted on walked
+  120° around from the layout `ik()`'s formulas assume.
+
+  Fixed in software rather than by re-bolting the plate or re-wiring pins:
+  `delta_servo/config.h` and `delta_app/robot_config.py` each define
+  `GEOM_TO_PHYS = [2, 0, 1]`, mapping IK's geometric slot 0/1/2 (-y axis,
+  +120°, +240°) to the physical arm/pin that's actually there. `ik()`
+  (`kinematics.cpp`) and the GUI's `calculateIPK`/`calculateFPK`
+  (`deltarobot.py`) all apply this mapping consistently, so a physical
+  servo's calibration (`CAL[]`/`ANGLE_LIMITS_DEG`, measured per unit) stays
+  indexed by its own pin regardless of which geometric role it plays — only
+  the geometry-to-pin correspondence changed, nothing was recalibrated.
+  `tests/test_config_sync.py` enforces the two `GEOM_TO_PHYS` arrays staying
+  identical. If the base plate is ever physically re-bolted to match the
+  model's original assumption, this should revert to `[0, 1, 2]`.
 
 ## Serial protocol (must match the GUI byte-for-byte)
 
@@ -175,6 +289,31 @@ only because that's what the boot default happens to be, and every later
 disable→enable cycle snaps back to whatever was last commanded (not to
 flat), because θ/xyz were never touched while disabled. Both behaviours
 described in HANDOFF §6.4 fall out of this one rule.
+
+## Upward final approach (backlash)
+
+The 2026-09-30 protractor sweeps (`tools/servo_sweep/CALIBRATION_LOG.md`)
+showed each servo lands about 1.3° differently depending on whether the
+bicep last moved down or up, and servo 2 up to about 4.5°. When the last
+motion lifts the bicep, all three track within about 0.5°. So the firmware
+makes every move end going up:
+
+- If any bicep would finish the move going **down** (θ increasing by more
+  than `APPROACH_TRIGGER_DEG`), the move first goes to the target's x/y at
+  `APPROACH_DZ_MM` (20 mm) **below** it, then rises straight up into it.
+  This covers sideways moves too, since those usually lower at least one bicep.
+- Both legs are one move. `mv` stays 1, and a program point's dwell, a
+  queued manual move or a Stop all wait until the rise has finished.
+- The dip never goes below `APPROACH_Z_FLOOR_MM` (the GUI's −800 mm probe
+  limit, as a platform-centre z). Near the floor the dip is shortened. The
+  move goes direct if there's no room, if the dip point is unreachable, or
+  if rising wouldn't lift every bicep.
+- Cost: every such move travels about 40 mm further: roughly 4 s extra
+  at 10 mm/s (v=2), 8 s at 5 mm/s. Jogging down by 5 mm dips 25 mm and comes back up.
+- Set `APPROACH_DZ_MM = 0` in `config.h` to turn it off.
+
+The GUI's 3D plot shows the dip, because it draws the angles the firmware
+streams back.
 
 ## macOS bring-up fixes found during testing
 
@@ -268,9 +407,11 @@ python3 -m pytest tests/ -v
 Covers (HANDOFF §9): Python kinematics (FK/IK round trip + on-axis
 regression), C++↔Python IK parity (via `tests/ik_cli`), the protocol frame
 parser (10 cases incl. numeric-string coercion, oversized-frame handling,
-the 1000ms `rxBusy` timeout), the motion planner/program runner (11 cases
+the 1000ms `rxBusy` timeout), the motion planner/program runner (17 cases
 incl. smoothstep, the T-duration formula, pending-slot "newest wins",
-dwell, stop, and the µs-clamp), and config.h/robot_config.py sync.
+dwell, stop, the µs-clamp, and the upward final approach: dip and rise,
+sideways moves, direct upward moves, the floor clamp, dwell after the rise,
+disable mid-dip), and config.h/robot_config.py sync.
 
 Two notable, documented findings from writing these tests (not bugs
 introduced by this port):

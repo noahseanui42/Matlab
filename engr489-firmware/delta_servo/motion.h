@@ -58,6 +58,15 @@ class Motion {
   // way until real calibration data can disagree with the angle limits.
   static int angleToUs(float thetaDeg, const ServoCal &cal, bool &clamped);
 
+  // Upward final approach (config.h APPROACH_*): a move that would finish
+  // with any bicep moving down first goes APPROACH_DZ_MM below the target,
+  // then rises straight up into it, so every servo's backlash is taken up
+  // the same way. Both legs run as one move (state stays MOVING; a dwell,
+  // a pending move or a requested stop all wait for the rise). On by
+  // default when APPROACH_DZ_MM > 0; tests of the base planner turn it off.
+  void setApproachEnabled(bool on) { approachEnabled_ = on; }
+  bool isApproaching() const { return approachPending_; }
+
   // --- Status, for protocol::buildStatus() / the glue layer ---
   const float *theta() const { return theta_; }
   const float *xyz() const { return xyz_; }
@@ -121,7 +130,13 @@ class Motion {
   uint32_t dwellDurationMs_ = 0;
   int dwellProgramIndex_ = -1;
 
+  bool approachEnabled_ = (APPROACH_DZ_MM > 0.0f);
+  bool approachPending_ = false;  // in the dip leg; approachFinal_ runs next
+  MoveTarget approachFinal_;
+
   bool solveAndBuildTarget(const float xyz[3], int mode_i, int v, int programIndex, MoveTarget &out);
+  bool planApproach(const MoveTarget &t, MoveTarget &dip) const;
+  void startMove(const MoveTarget &t, uint32_t nowMs);
   void beginMove(const MoveTarget &t, uint32_t nowMs);
   void beginProgramPoint(int idx, uint32_t nowMs);
   void finishMove(uint32_t nowMs);
