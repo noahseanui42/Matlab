@@ -1,6 +1,6 @@
 function plot_field_layers(dataFile, baselineFile, varargin)
 % plot_field_layers — heat map and direction map of a scan, one panel per z layer,
-% plus a 3D map with the layers stacked.
+% side views (x-z or y-z), and a 3D map with the layers stacked.
 %
 %   plot_field_layers(file)                  % raw field (includes Earth's field)
 %   plot_field_layers(file, baselineFile)    % file minus a reference scan, matched
@@ -8,6 +8,7 @@ function plot_field_layers(dataFile, baselineFile, varargin)
 %                                            % run minus a no-magnet run = magnet only)
 %   plot_field_layers(file, '', 'Save', true)        % also save PNGs next to the CSV
 %   plot_field_layers(file, '', 'Labels', false)     % no values printed on the heat map
+%   plot_field_layers(file, '', 'Side', 'yz')        % side views in y-z instead of x-z
 %   plot_field_layers(file, '', 'R', R)              % sensor -> robot rotation
 %                                                    % (default: scan_config's R_sensor_to_robot)
 %
@@ -20,7 +21,11 @@ function plot_field_layers(dataFile, baselineFile, varargin)
 %                          length, so weak and strong fields read the same);
 %                          colour = vertical component Bz (red = +z, blue = -z;
 %                          white = smallest |Bz| when Bz has one sign throughout).
-% Figure 3, 3D map:        the layers stacked at their real heights (|B| colour,
+% Figure 3, side views:    the field seen from the side, one panel per y row (x-z
+%                          plane; "Side", "yz" for y-z panels, one per x column).
+%                          Arrows = field direction in that plane (unit length);
+%                          colour = the component out of the page (By for x-z).
+% Figure 4, 3D map:        the layers stacked at their real heights (|B| colour,
 %                          same scale as figure 1) with 3D arrows showing the full
 %                          field direction at every point. Rotate it with the mouse.
 
@@ -28,6 +33,7 @@ p = inputParser;
 p.addParameter("Save", false);
 p.addParameter("Labels", true);
 p.addParameter("R", []);
+p.addParameter("Side", "xz");      % side views: "xz" (one panel per y) or "yz" (one per x)
 p.parse(varargin{:});
 opt = p.Results;
 if nargin < 2, baselineFile = ''; end
@@ -120,7 +126,7 @@ for k = 1:nz
     [X, Y] = meshgrid(xs, ys);
     quiver(X - U / 2, Y - V / 2, U, V, 0, "k", "LineWidth", 1, "MaxHeadSize", 0.4);
     hold off
-    [cl, cm] = bz_scale(B(:, 3));
+    [cl, cm] = sign_scale(B(:, 3));
     caxis(cl); colormap(gca, cm);
     axis equal tight
     set(gca, "XTick", xs, "YTick", ys);
@@ -132,8 +138,48 @@ end
 suptitle_compat(f2, sprintf("%s: arrows = field direction in the x-y plane, colour = Bz   (%s)", ...
     what, name));
 
-% --- 3: 3D map, layers stacked at their real heights ---
-f3 = figure("Name", ['3D map: ' name], "Color", "w", "Position", [80 80 900 750]);
+% --- 3: side views (x-z panels, one per y; or y-z panels, one per x) ---
+if strcmpi(opt.Side, "yz")
+    ia = 2; ib = 1; as = ys; bs = xs; an = "y"; bn = "x"; oc = 1;   % horizontal y, panels per x, out of page Bx
+else
+    ia = 1; ib = 2; as = xs; bs = ys; an = "x"; bn = "y"; oc = 2;   % horizontal x, panels per y, out of page By
+end
+zsa = sort(zs);
+nb = numel(bs); scols = min(nb, 5); srows = ceil(nb / scols);
+f3 = figure("Name", ['Side views: ' name], "Color", "w", ...
+    "Position", [80 80 max(380 * scols, 700) 330 * srows + 80]);
+da = min(diff(as)); dzs = da;
+if numel(zsa) > 1, dzs = min(diff(zsa)); end
+L = 0.8 * min(da, dzs);
+[cl, cm] = sign_scale(B(:, oc));
+for k = 1:nb
+    subplot(srows, scols, k);
+    on = abs(P(:, ib) - bs(k)) < 0.05;
+    Ma = side_grid(P(on, ia), P(on, 3), B(on, ia), as, zsa);
+    Mz = side_grid(P(on, ia), P(on, 3), B(on, 3), as, zsa);
+    Mo = side_grid(P(on, ia), P(on, 3), B(on, oc), as, zsa);
+    imagesc(as, zsa, Mo, "AlphaData", double(~isnan(Mo))); hold on
+    set(gca, "YDir", "normal");
+    h = hypot(Ma, Mz);
+    U = L * Ma ./ h; W = L * Mz ./ h;
+    [A, Zg] = meshgrid(as, zsa);
+    quiver(A - U / 2, Zg - W / 2, U, W, 0, "k", "LineWidth", 1, "MaxHeadSize", 0.4);
+    hold off
+    caxis(cl); colormap(gca, cm);
+    axis equal tight
+    set(gca, "XTick", as, "YTick", zsa);
+    xlim([as(1) as(end)] + pad * da); ylim([zsa(1) zsa(end)] + pad * dzs);
+    xlabel(sprintf('%s (mm)', an)); ylabel('z (mm)');
+    title(sprintf("%s = %.0f mm", bn, bs(k)));
+    if mod(k, scols) == 0 || k == nb
+        cb = colorbar; ylabel(cb, sprintf('B%s (G)', bn));
+    end
+end
+suptitle_compat(f3, sprintf("%s: side view, arrows = field direction in the %s-z plane, colour = B%s   (%s)", ...
+    what, an, bn, name));
+
+% --- 4: 3D map, layers stacked at their real heights ---
+f4 = figure("Name", ['3D map: ' name], "Color", "w", "Position", [80 80 900 750]);
 [xf, yf] = meshgrid(linspace(xs(1), xs(end), 101), linspace(ys(1), ys(end), 101));
 [X, Y] = meshgrid(xs, ys);
 L = 0.6 * min(dx, dy);                     % arrow length, mm
@@ -160,8 +206,9 @@ if opt.Save
     [d, n] = fileparts(char(dataFile));
     print(f1, fullfile(d, [n '_heatmap.png']), '-dpng', '-r150');
     print(f2, fullfile(d, [n '_direction.png']), '-dpng', '-r150');
-    print(f3, fullfile(d, [n '_3d.png']), '-dpng', '-r150');
-    fprintf("Saved %s_heatmap.png, %s_direction.png and %s_3d.png in %s\n", n, n, n, d);
+    print(f3, fullfile(d, [n '_side.png']), '-dpng', '-r150');
+    print(f4, fullfile(d, [n '_3d.png']), '-dpng', '-r150');
+    fprintf("Saved %s_heatmap.png, _direction.png, _side.png and _3d.png in %s\n", n, d);
 end
 end
 
@@ -199,10 +246,21 @@ end
 end
 
 
-function [cl, cmap] = bz_scale(bz)
-% Bz one sign everywhere (e.g. raw data, Earth's field): white -> red (+z) or
-% blue (-z) over the data range, so small changes show. Both signs (e.g. a
-% baseline-subtracted magnet field): blue -> white -> red, centred on 0.
+function M = side_grid(a, z, v, as, zs)
+% (numel(zs) x numel(as)) matrix for one side-view panel, NaN where missing
+M = nan(numel(zs), numel(as));
+ok = isfinite(v);
+[~, ia] = min(abs(a(ok) - as.'), [], 2);
+[~, iz] = min(abs(z(ok) - zs.'), [], 2);
+M(sub2ind(size(M), iz, ia)) = v(ok);
+end
+
+
+function [cl, cmap] = sign_scale(bz)
+% Colour scale for a signed component. One sign everywhere (e.g. raw Bz, Earth's
+% field): white -> red (+) or blue (-) over the data range, so small changes show.
+% Both signs (e.g. a baseline-subtracted magnet field): blue -> white -> red,
+% centred on 0.
 bz = bz(isfinite(bz));
 m = redblue(256);
 if all(bz >= 0)
