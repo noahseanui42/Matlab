@@ -1,0 +1,54 @@
+{
+  "name": "hybrid",
+  "forces": [
+    "cx",
+    "cy",
+    "cx_mid"
+  ],
+  "beta": [
+    5.387484181425335e-07,
+    5.387484181425335e-07,
+    2.677471251071574e-07
+  ],
+  "valid_box": {
+    "x": [
+      -50.0,
+      50.0
+    ],
+    "y": [
+      -150.0,
+      150.0
+    ],
+    "z": [
+      -700.0,
+      -600.0
+    ]
+  },
+  "source": "noahseanui42/engr489-REPORT analysis/error_model_coeffs_hybrid.json (refit_v2.py --hybrid, 2026-10-01): v1 centring fitted on protractor runs 2, 5, 6, plus a mid-box x term fitted on the pen-and-ruler box and midpoint tests, runs 10-19. Corners identical to v1.",
+  "geometry": {
+    "SB": 175.0,
+    "SP": 75.0,
+    "L_UP": 177.0,
+    "L_LO": 625.0,
+    "GEOM_TO_PHYS": [
+      2,
+      0,
+      1
+    ],
+    "ANGLE_LIMITS_DEG": [
+      [
+        -20.0,
+        70.0
+      ],
+      [
+        -20.0,
+        70.0
+      ],
+      [
+        -20.0,
+        70.0
+      ]
+    ],
+    "firmware": "branch claude/amazing-lovelace-onixrv (a185b44 calibration refit, ffe256b upward approach): CAL D9 1456/9.8315, D10 1373/9.7664, D11 1393/9.6658 us, us/deg"
+  }
+}

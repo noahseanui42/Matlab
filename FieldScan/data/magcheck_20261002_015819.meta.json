@@ -1,0 +1,68 @@
+{
+  "label": "magcheck",
+  "note": "",
+  "started": "2026-10-02T01:58:24",
+  "coil_current_A": null,
+  "n_points": 2,
+  "csv": "magcheck_20261002_015819.csv",
+  "frame": "sensor axes, gauss, raw (apply R_sensor_to_robot in MATLAB)",
+  "config": {
+    "port": "/dev/cu.usbmodem14101",
+    "tcp": [
+      0.0,
+      0.0,
+      -21.0
+    ],
+    "speed_v": 2,
+    "move_timeout_s": 30.0,
+    "settle_s": 0.5,
+    "park_xyz": [
+      0.0,
+      0.0,
+      -650.0
+    ],
+    "xr": [
+      -50.0,
+      50.0
+    ],
+    "nx": 2,
+    "yr": [
+      0.0,
+      0.0
+    ],
+    "ny": 1,
+    "zr": [
+      -650.0,
+      -650.0
+    ],
+    "nz": 1,
+    "mag_serial": 302277,
+    "n_avg": 20,
+    "sample_dt_s": 0.02,
+    "out_dir": "/Users/rochelle/engr489-delta-robot/host/Matlab-fieldscan/FieldScan/data",
+    "correction": "off"
+  },
+  "sensor": {
+    "serial": 302277,
+    "name": "PhidgetSpatial Precision 3/3/3 High Resolution",
+    "max_field_G": [
+      5.6,
+      5.6,
+      5.6
+    ]
+  },
+  "geometry": {
+    "SB": 175.0,
+    "SP": 150.0,
+    "L_UP": 180.0,
+    "L_LO": 625.0
+  },
+  "correction": {
+    "name": "off"
+  },
+  "positions": "x_mm..z_mm = target; sent_x_mm..sent_z_mm = coordinates sent to the robot",
+  "finished": "2026-10-02T01:58:41",
+  "points_done": 2,
+  "points_unreachable": 0,
+  "aborted": false
+}

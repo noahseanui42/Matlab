@@ -1,0 +1,142 @@
+{
+  "label": "dryrun",
+  "note": "",
+  "started": "2026-10-02T01:46:38",
+  "coil_current_A": null,
+  "n_points": 27,
+  "csv": "dryrun_20261002_014611.csv",
+  "frame": "sensor axes, gauss, raw (apply R_sensor_to_robot in MATLAB)",
+  "config": {
+    "port": "/dev/cu.usbmodem14101",
+    "tcp": [
+      0.0,
+      0.0,
+      -21.0
+    ],
+    "speed_v": 2,
+    "move_timeout_s": 30.0,
+    "settle_s": 0.5,
+    "park_xyz": [
+      0.0,
+      0.0,
+      -650.0
+    ],
+    "xr": [
+      -25.0,
+      25.0
+    ],
+    "nx": 3,
+    "yr": [
+      -25.0,
+      25.0
+    ],
+    "ny": 3,
+    "zr": [
+      -675.0,
+      -625.0
+    ],
+    "nz": 3,
+    "mag_serial": 302277,
+    "n_avg": 20,
+    "sample_dt_s": 0.02,
+    "out_dir": "/Users/rochelle/engr489-delta-robot/host/Matlab-fieldscan/FieldScan/data",
+    "correction": "hybrid"
+  },
+  "sensor": {
+    "serial": 302277,
+    "name": "PhidgetSpatial Precision 3/3/3 High Resolution",
+    "max_field_G": [
+      5.6,
+      5.6,
+      5.6
+    ]
+  },
+  "geometry": {
+    "SB": 175.0,
+    "SP": 150.0,
+    "L_UP": 180.0,
+    "L_LO": 625.0
+  },
+  "correction": {
+    "name": "hybrid",
+    "forces": [
+      "cx",
+      "cy",
+      "cx_mid"
+    ],
+    "beta": [
+      5.387484181425335e-07,
+      5.387484181425335e-07,
+      2.677471251071574e-07
+    ],
+    "valid_box": {
+      "x": [
+        -50.0,
+        50.0
+      ],
+      "y": [
+        -150.0,
+        150.0
+      ],
+      "z": [
+        -700.0,
+        -600.0
+      ]
+    },
+    "source": "noahseanui42/engr489-REPORT analysis/error_model_coeffs_hybrid.json (refit_v2.py --hybrid, 2026-10-01): v1 centring fitted on protractor runs 2, 5, 6, plus a mid-box x term fitted on the pen-and-ruler box and midpoint tests, runs 10-19. Corners identical to v1.",
+    "geometry": {
+      "SB": 175.0,
+      "SP": 75.0,
+      "L_UP": 177.0,
+      "L_LO": 625.0,
+      "GEOM_TO_PHYS": [
+        2,
+        0,
+        1
+      ],
+      "ANGLE_LIMITS_DEG": [
+        [
+          -20.0,
+          70.0
+        ],
+        [
+          -20.0,
+          70.0
+        ],
+        [
+          -20.0,
+          70.0
+        ]
+      ],
+      "firmware": "branch claude/amazing-lovelace-onixrv (a185b44 calibration refit, ffe256b upward approach): CAL D9 1456/9.8315, D10 1373/9.7664, D11 1393/9.6658 us, us/deg"
+    },
+    "points_outside_valid_box": 0,
+    "geometry_mismatch_with_robot_config": {
+      "SP": [
+        150.0,
+        75.0
+      ],
+      "L_UP": [
+        180.0,
+        177.0
+      ],
+      "GEOM_TO_PHYS": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          2,
+          0,
+          1
+        ]
+      ]
+    }
+  },
+  "positions": "x_mm..z_mm = target; sent_x_mm..sent_z_mm = coordinates sent to the robot",
+  "finished": "2026-10-02T01:48:37",
+  "points_done": 27,
+  "points_unreachable": 0,
+  "aborted": false
+}
