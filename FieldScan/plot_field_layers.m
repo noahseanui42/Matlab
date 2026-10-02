@@ -1,5 +1,6 @@
 function plot_field_layers(dataFile, baselineFile, varargin)
-% plot_field_layers — heat map and direction map of a scan, one panel per z layer.
+% plot_field_layers — heat map and direction map of a scan, one panel per z layer,
+% plus a 3D map with the layers stacked.
 %
 %   plot_field_layers(file)                  % raw field (includes Earth's field)
 %   plot_field_layers(file, baselineFile)    % file minus a reference scan, matched
@@ -19,6 +20,9 @@ function plot_field_layers(dataFile, baselineFile, varargin)
 %                          length, so weak and strong fields read the same);
 %                          colour = vertical component Bz (red = +z, blue = -z;
 %                          white = smallest |Bz| when Bz has one sign throughout).
+% Figure 3, 3D map:        the layers stacked at their real heights (|B| colour,
+%                          same scale as figure 1) with 3D arrows showing the full
+%                          field direction at every point. Rotate it with the mouse.
 
 p = inputParser;
 p.addParameter("Save", false);
@@ -64,7 +68,7 @@ nz = numel(zs);
 if numel(xs) < 2 || numel(ys) < 2
     error("Need at least 2 points along x and y for a map.");
 end
-grid = @(v, z) to_grid(P, v, xs, ys, z);   % (ny x nx) matrix for layer z, NaN where missing
+layer = @(v, z) to_grid(P, v, xs, ys, z);   % (ny x nx) matrix for layer z, NaN where missing
 
 [~, name] = fileparts(char(dataFile));
 dx = min(diff(xs)); dy = min(diff(ys));
@@ -78,7 +82,7 @@ lim = [min(Bmag) max(Bmag)];
 if diff(lim) == 0, lim = lim + [-1 1] * 1e-3; end
 for k = 1:nz
     subplot(rows, cols, k);
-    M = grid(Bmag, zs(k));
+    M = layer(Bmag, zs(k));
     [xf, yf] = meshgrid(linspace(xs(1), xs(end), 101), linspace(ys(1), ys(end), 101));
     Mf = interp2(xs, ys, M, xf, yf, "linear");
     imagesc(xf(1, :), yf(:, 1), Mf, "AlphaData", double(~isnan(Mf))); hold on
@@ -106,7 +110,7 @@ suptitle_compat(f1, sprintf("%s: |B|   (%s)", what, name));
 f2 = figure("Name", ['Direction map: ' name], "Color", "w", "Position", figsize);
 for k = 1:nz
     subplot(rows, cols, k);
-    Bx = grid(B(:, 1), zs(k)); By = grid(B(:, 2), zs(k)); Bz = grid(B(:, 3), zs(k));
+    Bx = layer(B(:, 1), zs(k)); By = layer(B(:, 2), zs(k)); Bz = layer(B(:, 3), zs(k));
     imagesc(xs, ys, Bz, "AlphaData", double(~isnan(Bz))); hold on
     set(gca, "YDir", "normal");
     h = hypot(Bx, By);
@@ -128,11 +132,36 @@ end
 suptitle_compat(f2, sprintf("%s: arrows = field direction in the x-y plane, colour = Bz   (%s)", ...
     what, name));
 
+% --- 3: 3D map, layers stacked at their real heights ---
+f3 = figure("Name", ['3D map: ' name], "Color", "w", "Position", [80 80 900 750]);
+[xf, yf] = meshgrid(linspace(xs(1), xs(end), 101), linspace(ys(1), ys(end), 101));
+[X, Y] = meshgrid(xs, ys);
+L = 0.6 * min(dx, dy);                     % arrow length, mm
+for k = 1:nz
+    Mf = interp2(xs, ys, layer(Bmag, zs(k)), xf, yf, "linear");
+    surf(xf, yf, zs(k) * ones(size(xf)), Mf, "EdgeColor", "none", "FaceAlpha", 0.8); hold on
+    Bx = layer(B(:, 1), zs(k)); By = layer(B(:, 2), zs(k)); Bz = layer(B(:, 3), zs(k));
+    h = sqrt(Bx.^2 + By.^2 + Bz.^2);
+    U = L * Bx ./ h; V = L * By ./ h; W = L * Bz ./ h;
+    Z = zs(k) * ones(size(X));
+    quiver3(X - U / 2, Y - V / 2, Z - W / 2, U, V, W, 0, "k", "LineWidth", 1, "MaxHeadSize", 0.4);
+end
+hold off
+caxis(lim); colormap(gca, seq_map());
+cb = colorbar; ylabel(cb, "|B| (G)");
+axis equal; grid on; box on
+set(gca, "XTick", xs, "YTick", ys, "ZTick", sort(zs));
+xlim([xs(1) xs(end)] + pad * dx); ylim([ys(1) ys(end)] + pad * dy);
+xlabel("x (mm)"); ylabel("y (mm)"); zlabel("z (mm)");
+view(-35, 25);
+title(sprintf("%s: |B| layers, arrows = field direction   (%s)", what, name), "Interpreter", "none");
+
 if opt.Save
     [d, n] = fileparts(char(dataFile));
     print(f1, fullfile(d, [n '_heatmap.png']), '-dpng', '-r150');
     print(f2, fullfile(d, [n '_direction.png']), '-dpng', '-r150');
-    fprintf("Saved %s_heatmap.png and %s_direction.png in %s\n", n, n, d);
+    print(f3, fullfile(d, [n '_3d.png']), '-dpng', '-r150');
+    fprintf("Saved %s_heatmap.png, %s_direction.png and %s_3d.png in %s\n", n, n, n, d);
 end
 end
 

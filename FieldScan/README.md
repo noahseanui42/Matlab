@@ -94,7 +94,7 @@ coefficients in `delta_app/pose_correction_hybrid.json`).
 
 ```matlab
 plot_field_map("data/coils_on_….csv", "data/baseline_….csv")   % coil field only
-plot_field_layers("data/mag_off_1_….csv")                       % heat map + direction map, one panel per z layer
+plot_field_layers("data/mag_off_1_….csv")                       % heat map + direction map per z layer, + 3D stacked map
 plot_field_layers("data/mag_off_1_….csv", "data/no_magnet_….csv") % same, magnet (or coil) field only
 plot_field_layers("data/mag_off_1_….csv", "", "Save", true)     % also save PNGs next to the CSV
 ```
