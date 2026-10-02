@@ -11,6 +11,14 @@ function plot_field_layers(dataFile, baselineFile, varargin)
 %   plot_field_layers(file, '', 'Side', 'yz')        % side views in y-z instead of x-z
 %   plot_field_layers(file, '', 'R', R)              % sensor -> robot rotation
 %                                                    % (default: scan_config's R_sensor_to_robot)
+%   plot_field_layers(file, '', 'TiltCorrect', true)     % remove the probe's tilt (pitch/roll)
+%   plot_field_layers(file, base, 'TiltCorrect', true)   % ... in both, to the baseline's centre
+%
+% 'TiltCorrect' needs a scan from field_scan_tilt.py (accelerometer columns). The
+% field at every point is rotated back to the reference orientation (tilt_correct)
+% before plotting. true: the reference is the baseline's centre point, or this
+% scan's centre with no baseline. It can also be a reference: 'mean', another
+% scan's file name, or a gravity vector [gx gy gz] (see tilt_correct).
 %
 % Works on CSVs from field_scan.py and run_field_scan.m. Positions are the
 % TARGET grid points (x_mm..z_mm), which is where each reading belongs.
@@ -33,6 +41,7 @@ p = inputParser;
 p.addParameter("Save", false);
 p.addParameter("Labels", true);
 p.addParameter("R", []);
+p.addParameter("TiltCorrect", false);   % true: remove the probe's tilt first (apply_tilt)
 p.addParameter("Side", "xz");      % side views: "xz" (one panel per y) or "yz" (one per x)
 p.parse(varargin{:});
 opt = p.Results;
@@ -52,6 +61,7 @@ end
 T = read_scan(dataFile);
 P = [T.x_mm T.y_mm T.z_mm];
 B = [T.Bx_G T.By_G T.Bz_G];
+[B, tiltTag] = apply_tilt(B, dataFile, opt.TiltCorrect, baselineFile);
 what = 'Raw field';
 if ~isempty(baselineFile)
     T0 = read_scan(baselineFile);
@@ -63,11 +73,13 @@ if ~isempty(baselineFile)
             nnz(~found), numel(found));
     end
     B0 = nan(size(B));
-    B0(found, :) = [T0.Bx_G(loc(found)) T0.By_G(loc(found)) T0.Bz_G(loc(found))];
+    B0all = apply_tilt([T0.Bx_G T0.By_G T0.Bz_G], baselineFile, opt.TiltCorrect, baselineFile);
+    B0(found, :) = B0all(loc(found), :);
     B = B - B0;
     [~, n0] = fileparts(char(baselineFile));
     what = ['Field minus ' n0];
 end
+what = [what tiltTag];
 B = (R * B.').';                     % sensor axes -> robot axes
 Bmag = sqrt(sum(B.^2, 2));
 

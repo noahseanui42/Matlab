@@ -1,9 +1,14 @@
-function plot_field_map(dataFile, baselineFile)
+function plot_field_map(dataFile, baselineFile, varargin)
 % plot_field_map — plot a scan CSV from run_field_scan.
 %
 %   plot_field_map(file)                 % raw field (includes Earth's field)
 %   plot_field_map(file, baselineFile)   % coil field only: file minus a coils-off
 %                                        % scan, matched point by point on position
+%   plot_field_map(file, '', 'TiltCorrect', true)     % remove the probe's tilt (pitch/roll)
+%   plot_field_map(file, base, 'TiltCorrect', true)   % ... in both, to the baseline's centre
+%
+% 'TiltCorrect' needs a scan from field_scan_tilt.py (accelerometer columns); see
+% apply_tilt and tilt_correct. It can also be a reference ('mean', a file, [gx gy gz]).
 %
 % Works on CSVs from field_scan.py and run_field_scan.m.
 %
@@ -12,12 +17,19 @@ function plot_field_map(dataFile, baselineFile)
 % Figure 3: % deviation of |B| from the centre value on the middle z plane
 %           (the usual Helmholtz uniformity plot)
 
+p = inputParser;
+p.addParameter("TiltCorrect", false);   % true: remove the probe's tilt first (apply_tilt)
+p.parse(varargin{:});
+opt = p.Results;
+if nargin < 2 || strlength(string(baselineFile)) == 0, baselineFile = ''; end
+
 T = readtable(dataFile);
 P = [T.x_mm T.y_mm T.z_mm];
-B = [T.Bx_G T.By_G T.Bz_G] * 100;   % gauss -> uT
+[B, tiltTag] = apply_tilt([T.Bx_G T.By_G T.Bz_G], dataFile, opt.TiltCorrect, baselineFile);
+B = B * 100;                        % gauss -> uT
 what = "Raw field";
 
-if nargin > 1 && strlength(string(baselineFile)) > 0
+if ~isempty(baselineFile)
     T0 = readtable(baselineFile);
     % match points by position (to 0.1 mm), so skipped or reordered points still line up
     [found, loc] = ismember(round(P, 1), round([T0.x_mm T0.y_mm T0.z_mm], 1), 'rows');
@@ -28,10 +40,12 @@ if nargin > 1 && strlength(string(baselineFile)) > 0
             nnz(~found), numel(found));
     end
     B0 = nan(size(B));
-    B0(found,:) = [T0.Bx_G(loc(found)) T0.By_G(loc(found)) T0.Bz_G(loc(found))] * 100;
+    B0all = apply_tilt([T0.Bx_G T0.By_G T0.Bz_G], baselineFile, opt.TiltCorrect, baselineFile);
+    B0(found,:) = B0all(loc(found),:) * 100;
     B = B - B0;
     what = "Coil field (baseline subtracted)";
 end
+what = what + tiltTag;
 
 ok = all(isfinite(B), 2);
 P = P(ok,:);  B = B(ok,:);

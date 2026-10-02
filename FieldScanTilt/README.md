@@ -27,7 +27,8 @@ delta app before running a scan**.
 | `field_scan_tilt.py` | The scan. Uses `delta_app/field_scan.py` for the robot link, moves, grid and position correction, and reads field + acceleration + gyro + pitch/roll at each point |
 | `tilt_correct.m` | Tilt per point from the accelerometer; field rotated back to a reference orientation; optional `_tiltcorr.csv` |
 | `plot_tilt.m` | Tilt map per z layer, tilt vs distance off-axis, gyro rate and settle time, pitch/roll maps, board vs acceleration check |
-| `plot_field_map.m`, `plot_field_layers.m`, `plot_field_arrows3d.m` | Field plots, as in FieldScan (read the tilt CSVs and the `_tiltcorr.csv` unchanged) |
+| `plot_field_map.m`, `plot_field_layers.m`, `plot_field_arrows3d.m` | Field plots, as in FieldScan, plus a `'TiltCorrect'` option that takes the probe's tilt out first |
+| `apply_tilt.m` | What `'TiltCorrect'` runs: the field rotated back to the reference orientation (via `tilt_correct`) |
 | `compare_runs.m` | Magnet repeatability, as in FieldScan |
 | `fit_dipole.m` | Point-dipole fit (moment + position) with residuals |
 | `run_field_scan.m`, `scan_config.m` | MATLAB-only scan (fallback), now with tilt and gyro; settings in `scan_config.m` |
@@ -161,16 +162,30 @@ plot_field_layers("data/magnet_tilt_….csv", "data/no_magnet_tilt_….csv")
 plot_field_arrows3d("data/magnet_tilt_….csv")
 R = compare_runs("data/magnet_run*.csv", "data/no_magnet_….csv");
 
-% magnet minus background, both tilt-corrected to the SAME reference:
+% the same maps with the probe's tilt (pitch/roll) taken out: add 'TiltCorrect'
+plot_field_layers("data/magnet_tilt_….csv", "", "TiltCorrect", true)
+plot_field_layers("data/magnet_tilt_….csv", "data/no_magnet_tilt_….csv", "TiltCorrect", true)
+plot_field_arrows3d("data/magnet_tilt_….csv", "data/no_magnet_tilt_….csv", "TiltCorrect", true)
+plot_field_map("data/coils_on_….csv", "data/baseline_….csv", "TiltCorrect", true)
+
+% or write corrected CSVs (both to the SAME reference), e.g. for fit_dipole:
 tilt_correct("data/no_magnet_tilt_….csv", "Write", true);
 tilt_correct("data/magnet_tilt_….csv", "Reference", "data/no_magnet_tilt_….csv", "Write", true);
-plot_field_layers("data/magnet_tilt_…_tiltcorr.csv", "data/no_magnet_tilt_…_tiltcorr.csv")
 fit_dipole("data/magnet_tilt_…_tiltcorr.csv", "data/no_magnet_tilt_…_tiltcorr.csv")
 ```
 
+**`'TiltCorrect', true`** rotates the field at every point back to a reference
+orientation before plotting (`apply_tilt.m`, which calls `tilt_correct`). With a
+baseline, both scans are corrected to the **baseline's** centre point, so the
+subtraction compares like with like; without one, to the scan's own centre. It
+also takes a reference: `'mean'`, another scan's file name, or a gravity vector
+`[gx gy gz]`. Titles say "tilt-corrected". It needs the accelerometer columns, so
+it refuses old FieldScan CSVs (plot those without the option) and `_tiltcorr.csv`
+files (already corrected). Points with no usable accelerometer reading are left out.
+
 The `_tiltcorr.csv` has the corrected field in `Bx_G..Bz_G` (raw kept in
-`Bx_raw_G..Bz_raw_G`, plus `tilt_deg`), so every plot uses it unchanged. Compare a
-plot or fit on the raw and on the corrected files to see how much was tilt.
+`Bx_raw_G..Bz_raw_G`, plus `tilt_deg`), so every plot and `fit_dipole` use it
+unchanged. Compare a plot with and without `'TiltCorrect'` to see how much was tilt.
 
 To try it all without hardware:
 ```matlab
@@ -221,7 +236,9 @@ readings arrive on a Python thread, so MATLAB must run Python **out of process**
 Tested with the simulated robot, a simulated tilting sensor and a stand-in for the
 Spatial channel (`python -m pytest FieldScanTilt/`, 14 tests), and the MATLAB side in
 Octave (`test_tilt_correct`, `test_fit_dipole`, and `make_demo_scan` through
-`plot_tilt`, `tilt_correct`, `plot_field_layers`, `plot_field_arrows3d`). The
+`plot_tilt`, `tilt_correct`, `plot_field_layers`, `plot_field_arrows3d`, with and
+without `'TiltCorrect'`; `plot_field_map` uses MATLAB-only functions, so only its
+`'TiltCorrect'` part was checked, in a copy translated for Octave). The
 MATLAB→Python link (`mag_open`, `mag_read`, `mag_settle`, `run_field_scan`,
 `test_magnetometer`) has not been run in MATLAB. On the first real run, check:
 - **The filter is accepted.** The `.meta.json` `sensor.algorithm` says `imu` (or

@@ -11,6 +11,14 @@ function plot_field_arrows3d(dataFile, baselineFile, varargin)
 %   plot_field_arrows3d(file, '', 'Save', true)      % also save <name>_arrows3d.png next to the CSV
 %   plot_field_arrows3d(file, '', 'R', R)            % sensor -> robot rotation
 %                                                    % (default: scan_config's R_sensor_to_robot)
+%   plot_field_arrows3d(file, '', 'TiltCorrect', true)     % remove the probe's tilt (pitch/roll)
+%   plot_field_arrows3d(file, base, 'TiltCorrect', true)   % ... in both, to the baseline's centre
+%
+% 'TiltCorrect' needs a scan from field_scan_tilt.py (accelerometer columns). The
+% field at every point is rotated back to the reference orientation (tilt_correct)
+% before plotting. true: the reference is the baseline's centre point, or this
+% scan's centre with no baseline. It can also be a reference: 'mean', another
+% scan's file name, or a gravity vector [gx gy gz] (see tilt_correct).
 %
 % Arrow length is proportional to the field strength, scaled so a typical arrow
 % (90th percentile of |B|) is one grid spacing long; stronger points (e.g. right
@@ -28,6 +36,7 @@ p.addParameter("Units", "cm");
 p.addParameter("Relative", true);
 p.addParameter("Save", false);
 p.addParameter("R", []);
+p.addParameter("TiltCorrect", false);   % true: remove the probe's tilt first (apply_tilt)
 p.parse(varargin{:});
 opt = p.Results;
 if nargin < 2, baselineFile = ''; end
@@ -46,6 +55,7 @@ end
 T = read_scan(dataFile);
 P = [T.x_mm T.y_mm T.z_mm];
 B = [T.Bx_G T.By_G T.Bz_G];
+[B, tiltTag] = apply_tilt(B, dataFile, opt.TiltCorrect, baselineFile);
 what = 'Raw field';
 if ~isempty(baselineFile)
     T0 = read_scan(baselineFile);
@@ -57,11 +67,13 @@ if ~isempty(baselineFile)
             nnz(~found), numel(found));
     end
     B0 = nan(size(B));
-    B0(found, :) = [T0.Bx_G(loc(found)) T0.By_G(loc(found)) T0.Bz_G(loc(found))];
+    B0all = apply_tilt([T0.Bx_G T0.By_G T0.Bz_G], baselineFile, opt.TiltCorrect, baselineFile);
+    B0(found, :) = B0all(loc(found), :);
     B = B - B0;
     [~, n0] = fileparts(char(baselineFile));
     what = ['Field minus ' n0];
 end
+what = [what tiltTag];
 B = (R * B.').';                     % sensor axes -> robot axes
 ok = all(isfinite(B), 2);
 P = P(ok, :); B = B(ok, :);
