@@ -53,6 +53,6 @@ fig.suptitle("magnet_tilt_20261002_223300: what the tilt correction changes (cor
              fontsize=12, color=ink)
 fig.savefig(D + "figures/magnet_tilt_20261002_223300/correction_change.png", dpi=130, facecolor=fig.get_facecolor())
 print("tilt deg: median %.2f max %.2f" % (np.median(tilt), tilt.max()))
-print("|dB| mG: median %.1f max %.1f; rel to |B| max %.1f%%" % (np.median(np.linalg.norm(d,axis=1)), np.linalg.norm(d,axis=1).max(), 100*(np.linalg.norm(d,axis=1)/np.linalg.norm(raw,axis=1)).max()))
+print("|dB| mG: median %.1f max %.1f; rel to |B| max %.1f%%" % (np.median(np.linalg.norm(d,axis=1)), np.linalg.norm(d,axis=1).max(), 0.1*(np.linalg.norm(d,axis=1)/np.linalg.norm(raw,axis=1)).max()))
 for k, n in enumerate("xyz"): print(f"dB{n} mG range {d[:,k].min():.1f} .. {d[:,k].max():.1f}")
 print("max |B| change (should be 0): %.2e G" % np.abs(np.linalg.norm(cor,axis=1)-np.linalg.norm(raw,axis=1)).max())
