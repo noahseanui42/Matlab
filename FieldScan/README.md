@@ -96,6 +96,8 @@ coefficients in `delta_app/pose_correction_hybrid.json`).
 plot_field_map("data/coils_on_….csv", "data/baseline_….csv")   % coil field only
 plot_field_layers("data/mag_off_1_….csv")                       % heat map, direction map, side views, 3D stacked map
 plot_field_layers("data/mag_off_1_….csv", "", "Side", "yz")     % side views in y-z instead of x-z
+plot_field_arrows3d("data/mag_off_1_….csv")                     % 3D arrows coloured by layer on see-through planes
+plot_field_arrows3d("data/mag_off_1_….csv", "", "Equal", true)  % same, all arrows the same length
 plot_field_layers("data/mag_off_1_….csv", "data/no_magnet_….csv") % same, magnet (or coil) field only
 plot_field_layers("data/mag_off_1_….csv", "", "Save", true)     % also save PNGs next to the CSV
 ```
