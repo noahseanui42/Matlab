@@ -114,6 +114,20 @@ R = compare_runs("data/magnet_run*.csv", "data/no_magnet_….csv");
 This reports the spread of |B| across runs and converts it to a position
 repeatability in mm (spread ÷ field gradient).
 
+Maps of those results, and correction off vs hybrid side by side:
+```matlab
+Roff = compare_runs(["data/…_magnet_….csv" "data/…_magnet_off2_….csv"], "data/…_no_magnet.csv");
+Rhyb = compare_runs(["data/…_magnet_hybrid_….csv" "data/…_magnet_hybrid2_….csv"], "data/…_no_magnet.csv");
+plot_repeatability_layers(Roff, 'Title', 'correction off')   % sigma_pos and |grad B| per z layer
+S = compare_repeatability(Roff, Rhyb, 'Names', {'off', 'hybrid'})   % histograms + point-by-point
+```
+A sigma_pos of 0 means the runs agreed to within the sensor noise at that point.
+
+What the position correction did to each point (sent vs target, needs a `--correction hybrid` scan):
+```matlab
+plot_correction_map("data/…_magnet_hybrid_….csv")            % add 'Save', true for a PNG
+```
+
 To try the plots without hardware:
 ```matlab
 [f, f0] = make_demo_scan(); plot_field_map(f, f0)
