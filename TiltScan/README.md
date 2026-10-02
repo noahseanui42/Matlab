@@ -69,6 +69,15 @@ these files. Then:
 | `settled` | 1 = gyro went quiet, 0 = gyro wait timed out, −1 = fixed wait |
 | `pitch_deg, roll_deg` | Mean pitch and roll from the board's IMU/AHRS filter, deg (absolute: level = 0 plus any mounting offset) |
 | `acc_pitch_deg, acc_roll_deg` | Pitch (about sensor y) and roll (about sensor x) from the mean acceleration, deg. Signs may differ from the board's convention. |
+| `spatial_t_first_ms, spatial_t_last_ms` | The 1044's own timestamps of the first and last reading averaged into the row, ms since the Spatial channel opened. With 20 readings at 20 ms they are 380 ms apart. |
+
+**Timing of a row:** after the settle wait, the script clears what the 1044 sent
+during the wait and averages the next `n_avg` readings (20 × 20 ms ≈ 0.4 s). Each
+reading holds field, acceleration and gyro from the same instant, so the field and
+the tilt in a row cover the same window. `t_s` is stamped when the row is written,
+just after the window ends. To put the 1044's timestamps on the `t_s` clock, use
+`spatial_timestamp_at_t0_ms` from the `.meta.json` (the 1044's timestamp when the
+scan's t_s = 0): window start in scan seconds = (spatial_t_first_ms − that) / 1000.
 
 ## Afterwards in MATLAB
 

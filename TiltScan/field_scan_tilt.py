@@ -38,6 +38,9 @@ Extra CSV columns, after field_scan.py's 19 (so existing MATLAB scripts still re
     acc_pitch_deg, acc_roll_deg pitch (about sensor y) and roll (about sensor x) from
                                 the mean acceleration; signs may differ from the
                                 board's convention, compare them on the first run
+    spatial_t_first_ms,         the 1044's own timestamps (ms since the channel opened) of
+    spatial_t_last_ms           the first and last reading averaged into this row; the
+                                .meta.json has the timestamp at t_s = 0 to line them up
 """
 
 import argparse
@@ -62,6 +65,7 @@ TILT_COLUMNS = [
     "ax_g", "ay_g", "az_g", "ax_std_g", "ay_std_g", "az_std_g",
     "gyro_rms_dps", "gyro_max_dps", "settle_s", "settled",
     "pitch_deg", "roll_deg", "acc_pitch_deg", "acc_roll_deg",
+    "spatial_t_first_ms", "spatial_t_last_ms",
 ]
 ALGORITHMS = ("imu", "ahrs", "none")
 UNKNOWN = 1e100        # Phidget22 reports unknown / out-of-range values as 1e300
@@ -168,7 +172,8 @@ class Phidget1044Spatial:
 
     def samples(self, n, dt_s, clock=None):
         """The next n events after this call: lists of field, acceleration, angular
-        rate and (pitch, roll). Unknown values are left out, per sensor."""
+        rate, (pitch, roll) and the events' timestamps (ms). Unknown values are left
+        out, per sensor; every event's timestamp is kept."""
         with self._lock:
             self._buf.clear()
         got, E = [], []
@@ -183,7 +188,13 @@ class Phidget1044Spatial:
                 E.append(e)
         got = got[:n]
         return ([ev[2] for ev in got if _known(ev[2])], [ev[0] for ev in got if _known(ev[0])],
-                [ev[1] for ev in got if _known(ev[1])], E)
+                [ev[1] for ev in got if _known(ev[1])], E, [ev[3] for ev in got])
+
+    def latest_timestamp(self):
+        """Timestamp (ms) of the newest event, or NaN."""
+        with self._lock:
+            ev = self._latest
+        return ev[3] if ev is not None else math.nan
 
     def zero_gyro(self, clock=Clock):
         self.sp.zeroGyro()          # Phidget: re-zeros in 1-2 s, board must be still
@@ -256,9 +267,11 @@ def accel_pitch_roll(a):
 
 
 def poll_samples(sensor, n, dt_s, clock=Clock):
-    """samples() for a sensor with mag()/accel()/gyro()/euler() getters (the simulation)."""
-    B, A, W, E = [], [], [], []
+    """samples() for a sensor with mag()/accel()/gyro()/euler() getters (the simulation).
+    Timestamps are the clock's time of each read, in ms."""
+    B, A, W, E, T = [], [], [], [], []
     for _ in range(n):
+        T.append(clock.now() * 1000.0)
         for read, store in ((sensor.mag, B), (sensor.accel, A), (sensor.gyro, W), (sensor.euler, E)):
             try:
                 v = read()
@@ -267,12 +280,12 @@ def poll_samples(sensor, n, dt_s, clock=Clock):
             except Exception:
                 pass
         clock.sleep(dt_s)
-    return B, A, W, E
+    return B, A, W, E, T
 
 
 def read_point(sensor, n, dt_s, clock=Clock):
     """Average n samples of field, acceleration, gyro and pitch/roll."""
-    B, A, W, E = sensor.samples(n, dt_s, clock)
+    B, A, W, E, T = sensor.samples(n, dt_s, clock)
     Bm, Bs = _mean_std(B)
     Am, As = _mean_std(A)
     rates = [_norm(w) for w in W]
@@ -281,7 +294,8 @@ def read_point(sensor, n, dt_s, clock=Clock):
     return {"B": Bm, "Bsd": Bs, "n": len(B), "a": Am, "asd": As,
             "g_rms": math.sqrt(statistics.fmean(r * r for r in rates)) if rates else math.nan,
             "g_max": max(rates) if rates else math.nan,
-            "pitch": pitch, "roll": roll, "acc_pr": accel_pitch_roll(Am)}
+            "pitch": pitch, "roll": roll, "acc_pr": accel_pitch_roll(Am),
+            "ts": (T[0], T[-1]) if T else (math.nan, math.nan)}
 
 
 # --------------------------------------------------------------------------
@@ -346,8 +360,13 @@ def run_scan(link, sensor, cfg, label="scan", note="", coil_current_A=None,
     def write_meta():
         meta_path.write_text(json.dumps(meta, indent=2))
 
-    write_meta()
     t_scan = clock.now()
+    meta["spatial_timestamp_at_t0_ms"] = (sensor.latest_timestamp()
+                                          if hasattr(sensor, "latest_timestamp") else None)
+    meta["spatial_timestamps"] = ("spatial_t_first_ms/spatial_t_last_ms are the 1044's own event "
+                                  "timestamps, ms since the channel opened; at t_s = 0 it read "
+                                  "spatial_timestamp_at_t0_ms")
+    write_meta()
     n_skipped = n_unsettled = 0
     nan3 = [math.nan] * 3
     try:
@@ -367,7 +386,7 @@ def run_scan(link, sensor, cfg, label="scan", note="", coil_current_A=None,
                 if err == 1:
                     r = {"B": nan3, "Bsd": nan3, "n": 0, "a": nan3, "asd": nan3, "g_rms": math.nan,
                          "g_max": math.nan, "pitch": math.nan, "roll": math.nan,
-                         "acc_pr": (math.nan, math.nan)}
+                         "acc_pr": (math.nan, math.nan), "ts": (math.nan, math.nan)}
                     waited, settled = 0.0, -1
                     n_skipped += 1
                 else:
@@ -384,7 +403,8 @@ def run_scan(link, sensor, cfg, label="scan", note="", coil_current_A=None,
                             *(f"{v:.6f}" for v in r["a"]), *(f"{v:.6f}" for v in r["asd"]),
                             f"{r['g_rms']:.4f}", f"{r['g_max']:.4f}", f"{waited:.2f}", settled,
                             f"{r['pitch']:.4f}", f"{r['roll']:.4f}",
-                            *(f"{v:.4f}" for v in r["acc_pr"])])
+                            *(f"{v:.4f}" for v in r["acc_pr"]),
+                            *(f"{v:.3f}" for v in r["ts"])])
                 f.flush()
                 meta["points_done"] = k
                 pr = (r["pitch"], r["roll"]) if math.isfinite(r["pitch"]) else r["acc_pr"]
@@ -486,6 +506,9 @@ class FakeTiltSensor:
 
     def samples(self, n, dt_s, clock=None):
         return poll_samples(self, n, dt_s, clock or self.clock)
+
+    def latest_timestamp(self):
+        return self.clock.now() * 1000.0
 
     def zero_gyro(self, clock=None):
         pass

@@ -142,6 +142,8 @@ def test_spatial_channel_buffers_events():
     assert abs(r["B"][2] + 0.5) < 1e-12 and abs(r["a"][2] + 1.0) < 1e-12
     assert r["pitch"] == 1.5 and r["roll"] == -0.5
     assert all(abs(v) < 1e-9 for v in r["acc_pr"])
+    t0, t1 = r["ts"]                                # consecutive events, 4 ms apart
+    assert t1 - t0 == 4.0 * 19 and t0 % 4.0 == 0
     sensor.close()
 
 
@@ -179,8 +181,10 @@ class FakeSpatialChannel:
 
     def openWaitForAttachment(self, ms):
         def run():
+            k = 0
             while not self._stop.is_set():
-                self.handler(self, [0.0, 0.0, -1.0], [0.0, 0.0, 0.0], [0.2, 0.05, -0.5], 0.0)
+                self.handler(self, [0.0, 0.0, -1.0], [0.0, 0.0, 0.0], [0.2, 0.05, -0.5], 20.0 * k)
+                k += 1
                 time.sleep(0.004)
         threading.Thread(target=run, daemon=True).start()
 
@@ -200,6 +204,7 @@ def test_spatial_open_path(monkeypatch):
         assert info["algorithm"] == "imu" and info["max_field_G"] == [5.6] * 3
         r = ft.read_point(sensor, 5, 0.02)
         assert r["n"] == 5 and (r["pitch"], r["roll"]) == (0.3, 0.2)
+        assert r["ts"][1] - r["ts"][0] == 20.0 * 4 and sensor.latest_timestamp() >= r["ts"][1]
         sensor.zero_gyro(ft.VirtualClock())
         assert sensor.sp.zeroed
     finally:
@@ -219,3 +224,19 @@ def test_spatial_board_refuses_algorithm(monkeypatch, capsys):
         assert sensor.info()["algorithm"] == "none" and "Not Supported" in sensor.info()["algorithm_error"]
     finally:
         sensor.close()
+
+
+def test_timestamps_per_row(tmp_path):
+    p, rows, meta = scan(tmp_path, zr=(-700, -400), nz=2)    # some unreachable rows too
+    t0 = meta["spatial_timestamp_at_t0_ms"]
+    prev = t0
+    for r in rows:
+        if r["err"] == "1":
+            assert r["spatial_t_first_ms"] == "nan" and r["spatial_t_last_ms"] == "nan"
+            continue
+        a, b = float(r["spatial_t_first_ms"]), float(r["spatial_t_last_ms"])
+        assert abs((b - a) - 4 * 20.0) < 1e-6          # n_avg 5 readings, 20 ms apart
+        assert a > prev                                  # after the previous row, and after t0
+        # the window ends just before the row is stamped (t_s, s since the scan start)
+        assert 0 <= float(r["t_s"]) * 1000 - (b - t0) <= 25
+        prev = b
