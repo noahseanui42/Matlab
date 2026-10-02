@@ -13,6 +13,10 @@ function S = plot_tilt(dataFile, varargin)
 %   side that dips). Check the sign once by tipping the board by hand.
 % Figure 2: tilt vs horizontal distance from the robot axis (colour = z), the gyro's
 %   angular rate while sampling, and the settle time at each point.
+% Figure 3: pitch and roll per z layer, relative to the reference point (from the
+%   board's IMU/AHRS filter; from the acceleration where the filter gave none).
+% Figure 4: board-filter pitch/roll against pitch/roll from the acceleration. They
+%   should lie on a line of slope +1 or -1 (the sign shows the board's convention).
 % Returns tilt_correct's struct.
 
 p = inputParser;
@@ -91,11 +95,70 @@ end
 grid on; xlabel('point'); ylabel('settle time (s)');
 title('Settle time (x = gyro never went quiet)');
 
+% --- 3: pitch and roll per layer, relative to the reference point ---
+pitch = S.pitch_deg; roll = S.roll_deg; src = 'board filter';
+useAcc = ~isfinite(pitch) | ~isfinite(roll);
+if all(useAcc), src = 'acceleration'; elseif any(useAcc & ok), src = 'board filter / acceleration'; end
+pitch(useAcc) = S.acc_pitch_deg(useAcc); roll(useAcc) = S.acc_roll_deg(useAcc);
+idx = find(ok);                                   % reference: valid point nearest the grid centre
+cc = (min(P(ok, :), [], 1) + max(P(ok, :), [], 1)) / 2;
+[~, jj] = min(sum((P(idx, :) - cc).^2, 2));
+j0 = idx(jj);
+f3 = figure('Name', ['Pitch and roll: ' name], 'Color', 'w', 'Position', [120 120 430 * nz 760]);
+vals = {pitch - pitch(j0), roll - roll(j0)};
+labels = {'pitch', 'roll'};
+for q = 1:2
+    v = vals{q};
+    c = max(abs(v(ok & isfinite(v))));
+    if isempty(c) || c == 0, c = 1e-3; end
+    for k = 1:nz
+        subplot(2, nz, (q - 1) * nz + k);
+        imagesc(xs, ys, to_grid(P, v, xs, ys, zs(k), ok));
+        set(gca, 'YDir', 'normal');
+        caxis([-c c]); colorbar;
+        axis equal tight
+        xlabel('x (mm)'); ylabel('y (mm)');
+        title(sprintf('%s (deg), z = %.0f mm', labels{q}, zs(k)));
+    end
+end
+annotation_title(f3, sprintf('Pitch and roll relative to [%.0f %.0f %.0f] mm, from the %s', P(j0, :), src));
+
+% --- 4: board filter vs acceleration ---
+haveBoth = ok & isfinite(S.pitch_deg) & isfinite(S.acc_pitch_deg);
+f4 = [];
+if any(haveBoth)
+    f4 = figure('Name', ['Pitch/roll check: ' name], 'Color', 'w', 'Position', [140 140 900 400]);
+    pairs = {S.acc_pitch_deg, S.pitch_deg; S.acc_roll_deg, S.roll_deg};
+    for q = 1:2
+        subplot(1, 2, q);
+        a = pairs{q, 1}(haveBoth); b = pairs{q, 2}(haveBoth);
+        plot(a, b, 'o'); grid on
+        xlabel(sprintf('%s from acceleration (deg)', labels{q}));
+        ylabel(sprintf('%s from the board filter (deg)', labels{q}));
+        pc = polyfit(a, b, 1);
+        title(sprintf('%s: slope %.3f, offset %.3f deg, rms diff %.3f deg', labels{q}, pc(1), pc(2), ...
+            sqrt(mean((b - polyval(pc, a)).^2))));
+    end
+end
+
 if opt.Save
     [dd, n] = fileparts(S.file);
     print(f1, fullfile(dd, [n '_tiltmap.png']), '-dpng', '-r150');
     print(f2, fullfile(dd, [n '_tiltsettle.png']), '-dpng', '-r150');
-    fprintf('Saved %s_tiltmap.png and _tiltsettle.png in %s\n', n, dd);
+    print(f3, fullfile(dd, [n '_pitchroll.png']), '-dpng', '-r150');
+    if ~isempty(f4), print(f4, fullfile(dd, [n '_pitchroll_check.png']), '-dpng', '-r150'); end
+    fprintf('Saved %s_tiltmap.png, _tiltsettle.png and _pitchroll*.png in %s\n', n, dd);
+end
+end
+
+
+function annotation_title(fig, s)
+figure(fig);
+if exist('sgtitle', 'file') || exist('sgtitle', 'builtin')
+    sgtitle(s, 'Interpreter', 'none');
+else
+    annotation('textbox', [0 0.95 1 0.05], 'String', s, 'EdgeColor', 'none', ...
+        'HorizontalAlignment', 'center', 'Interpreter', 'none');
 end
 end
 

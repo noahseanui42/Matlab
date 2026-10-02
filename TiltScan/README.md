@@ -1,7 +1,13 @@
 # TiltScan
 
-The FieldScan scan with the 1044's **accelerometer** (tilt at every point) and
+The FieldScan scan with the 1044's **pitch and roll** (tilt at every point) and
 **gyroscope** (was the probe still?) logged in the same row as the field.
+
+The 1044 is read through its **Spatial** channel, the one that works on our board
+(the separate Magnetometer / Accelerometer / Gyroscope channels don't open). Every
+Spatial event carries acceleration, angular rate and field from the same instant.
+The board's own orientation filter (`--algorithm imu`, the default) gives pitch and
+roll; the script also works them out from the averaged acceleration as a check.
 
 Nothing in `FieldScan/` or `engr489-firmware/delta_app/` is changed.
 `field_scan_tilt.py` imports `field_scan.py` for the robot link, moves, grid and
@@ -34,6 +40,13 @@ All of `field_scan.py`'s options work the same way. New ones:
 | `--settle-min` | Gyro mode: shortest wait, s | 0.5 |
 | `--settle` | Fixed wait, or in gyro mode the **longest** wait | 5.0 |
 | `--no-zero-gyro` | Don't zero the gyro at the park position before the scan | zero it |
+| `--algorithm` | Board's orientation filter for pitch/roll: `imu` (accelerometer + gyro), `ahrs` (also the magnetometer) or `none` | `imu` |
+
+Use `imu`, not `ahrs`. AHRS also steers by the magnetometer, which the magnet being
+mapped disturbs. Heading isn't logged: it needs the magnetometer (AHRS) or drifts
+(IMU), and tilt only needs pitch and roll. If the board refuses the algorithm, the
+script warns, logs `pitch_deg`/`roll_deg` as NaN and carries on; the
+acceleration-based pitch and roll still work.
 
 Output goes to `TiltScan/data/<label>_<time>.csv` and `.meta.json`.
 
@@ -54,13 +67,15 @@ these files. Then:
 | `gyro_rms_dps, gyro_max_dps` | Angular rate magnitude while the field was sampled, deg/s |
 | `settle_s` | Time waited after the move, s |
 | `settled` | 1 = gyro went quiet, 0 = gyro wait timed out, −1 = fixed wait |
+| `pitch_deg, roll_deg` | Mean pitch and roll from the board's IMU/AHRS filter, deg (absolute: level = 0 plus any mounting offset) |
+| `acc_pitch_deg, acc_roll_deg` | Pitch (about sensor y) and roll (about sensor x) from the mean acceleration, deg. Signs may differ from the board's convention. |
 
 ## Afterwards in MATLAB
 
 ```matlab
 cd TiltScan; addpath ../FieldScan
-plot_tilt("data/magnet_tilt_….csv")                     % tilt map + settling
-S = tilt_correct("data/magnet_tilt_….csv");             % S.tilt_deg, S.B_corr_G, ...
+plot_tilt("data/magnet_tilt_….csv")                     % tilt map, settling, pitch/roll maps, check
+S = tilt_correct("data/magnet_tilt_….csv");             % S.tilt_deg, S.B_corr_G, S.pitch_deg, S.roll_deg, ...
 
 % magnet minus background, both tilt-corrected to the SAME reference:
 tilt_correct("data/no_magnet_tilt_….csv", "Write", true);
@@ -76,8 +91,15 @@ see how much of the dipole residual was tilt.
 
 ## How the tilt is worked out
 
-At rest the accelerometer measures gravity, so `g = a/|a|` is "down" in the
-sensor's axes. The tilt at a point is the angle between its `g` and a reference
+**Pitch and roll** are logged as numbers per point (`pitch_deg`, `roll_deg`) and
+mapped by `plot_tilt` (figure 3, relative to the grid centre). Figure 4 plots the
+board's pitch/roll against the ones from acceleration: while the probe is still they
+should agree (slope ±1). The sign tells you the board's convention.
+
+**The correction** uses the gravity vector (`ax_g..az_g`) rather than the pitch/roll
+numbers. While the probe is still it is the same information, and it doesn't depend
+on the order or signs of the board's Euler angles. At rest the accelerometer measures
+gravity, so `g = a/|a|` is "down" in the sensor's axes. The tilt at a point is the angle between its `g` and a reference
 `g_ref`. The default reference is the point nearest the middle of the grid; you can
 also use another scan's centre, the scan mean, or a given vector. The field is
 rotated by the smallest rotation that takes `g` onto `g_ref` (Rodrigues).
@@ -97,14 +119,15 @@ Limits:
 
 ## Not yet checked on hardware
 
-Everything was tested with the simulated robot and a simulated tilting sensor:
-`python -m pytest TiltScan/` (7 tests) and `test_tilt_correct` in MATLAB/Octave.
-On the real 1044_0, check on the first run:
-- **All three channels open together.** The script opens the magnetometer,
-  accelerometer and gyroscope channels of the same serial number. `info()` in the
-  `.meta.json` records each channel's data interval, in case the 1044 forces one
-  shared rate.
-- **The gyro zeroes at the park position.** `Gyroscope.zero()` takes 1–2 s and needs
-  the board still. It runs after the park move and one settle wait.
+Everything was tested with the simulated robot, a simulated tilting sensor and a
+stand-in for Phidget22's Spatial channel: `python -m pytest TiltScan/` (13 tests)
+and `test_tilt_correct` in MATLAB/Octave. On the real 1044_0, check on the first run:
+- **The algorithm is accepted.** The `.meta.json` `sensor.algorithm` says `imu` (or
+  `none` with an `algorithm_error`). `pitch_deg` should be finite in the CSV.
+- **The board's pitch/roll agree with the acceleration ones** (`plot_tilt` figure 4).
+  If the filter values lag or wander, give it a longer settle time or rely on the
+  acceleration values.
+- **The gyro zeroes at the park position.** `Spatial.zeroGyro()` takes 1–2 s and
+  needs the board still. It runs after the park move and one settle wait.
 - **Accelerometer noise and the tilt resolution** you actually get. Take a scan at one
   point with several repeats and look at the spread of `tilt_deg`.

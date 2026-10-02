@@ -1,5 +1,5 @@
 """Field scan with tilt logging: the same scan as delta_app/field_scan.py, plus the
-1044's accelerometer (tilt) and gyroscope (is the probe still?) at every point.
+1044's pitch and roll (tilt) and gyroscope (is the probe still?) at every point.
 
     python TiltScan/field_scan_tilt.py --label magnet_tilt --note "strong magnet"
     python TiltScan/field_scan_tilt.py --label magnet_tilt --correction hybrid
@@ -10,11 +10,17 @@ field_scan.py is NOT changed: this script imports its robot link, moves, grid an
 position correction, and only replaces the per-point reading and the CSV writing.
 All field_scan.py options work the same way. Output goes to TiltScan/data/ by default.
 
-Per point: move, settle, then read the magnetometer AND the accelerometer in the same
-loop (n_avg samples) and log both in one row. While the probe is still, the
-accelerometer measures gravity only, so its direction gives the board's tilt.
-MATLAB (TiltScan/tilt_correct.m) turns that into a tilt angle per point and
-rotates B back to a reference orientation.
+The 1044 is read through its Spatial channel (the separate Magnetometer /
+Accelerometer / Gyroscope channels don't open on our board). Every Spatial event
+carries acceleration, angular rate and field from the same instant, and with
+--algorithm imu (default) or ahrs the board's own orientation filter also gives
+pitch and roll (Spatial.getEulerAngles).
+
+Per point: move, settle, then collect n_avg Spatial events and average them into one
+row: field, acceleration, gyro, and pitch/roll both from the board's filter and
+from the averaged acceleration (while still they should agree; the acceleration
+ones need no filter). MATLAB (TiltScan/tilt_correct.m) turns the gravity vector
+into a tilt per point and rotates B back to a reference orientation.
 
 Settling: by default a fixed --settle wait, as in field_scan.py. With
 --gyro-settle RATE (deg/s) it waits until the gyro's angular rate has stayed below
@@ -27,15 +33,22 @@ Extra CSV columns, after field_scan.py's 19 (so existing MATLAB scripts still re
     gyro_rms_dps, gyro_max_dps  angular rate magnitude while sampling, deg/s
     settle_s                    time waited after the move, s
     settled                     1 gyro went quiet, 0 gyro wait timed out, -1 fixed wait
+    pitch_deg, roll_deg         mean pitch and roll from the board's IMU/AHRS filter
+                                (NaN with --algorithm none or if the board refuses it)
+    acc_pitch_deg, acc_roll_deg pitch (about sensor y) and roll (about sensor x) from
+                                the mean acceleration; signs may differ from the
+                                board's convention, compare them on the first run
 """
 
 import argparse
+import collections
 import csv
 import json
 import math
 import random
 import statistics
 import sys
+import threading
 import time
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -48,7 +61,10 @@ import field_scan as fs   # noqa: E402  (reused unchanged)
 TILT_COLUMNS = [
     "ax_g", "ay_g", "az_g", "ax_std_g", "ay_std_g", "az_std_g",
     "gyro_rms_dps", "gyro_max_dps", "settle_s", "settled",
+    "pitch_deg", "roll_deg", "acc_pitch_deg", "acc_roll_deg",
 ]
+ALGORITHMS = ("imu", "ahrs", "none")
+UNKNOWN = 1e100        # Phidget22 reports unknown / out-of-range values as 1e300
 CSV_COLUMNS = fs.CSV_COLUMNS + TILT_COLUMNS
 
 
@@ -59,6 +75,7 @@ class TiltScanConfig(fs.ScanConfig):
     still_s: float = 1.0             # ... and stay below gyro_settle_dps this long
     settle_min_s: float = 0.5        # gyro mode: always wait at least this
     zero_gyro: bool = True           # zero the gyro at the park position before the scan
+    algorithm: str = "imu"           # board's orientation filter for pitch/roll: imu, ahrs or none
 
 
 class Clock:
@@ -68,77 +85,118 @@ class Clock:
 
 
 # --------------------------------------------------------------------------
-# Sensor: three channels of the same 1044
+# Sensor: the 1044's Spatial channel
 # --------------------------------------------------------------------------
-class Phidget1044Tilt:
-    """Magnetometer, accelerometer and gyroscope channels of one 1044, opened together."""
+class Phidget1044Spatial:
+    """The 1044 through its Spatial channel. Each SpatialData event carries
+    acceleration (g), angular rate (deg/s) and field (G) from the same instant; the
+    events are buffered by a handler (Spatial has no getters for them). Pitch and
+    roll come from the board's IMU/AHRS filter via getEulerAngles()."""
 
-    GETTERS = {"mag": "getMagneticField", "acc": "getAcceleration", "gyro": "getAngularRate"}
-
-    def __init__(self, serial_number=0, sample_dt_s=0.02):
-        from Phidget22.Devices.Magnetometer import Magnetometer
-        from Phidget22.Devices.Accelerometer import Accelerometer
-        from Phidget22.Devices.Gyroscope import Gyroscope
-        self.ch = {}
+    def __init__(self, serial_number=0, sample_dt_s=0.02, algorithm="imu", channel=None):
+        self._lock = threading.Lock()
+        self._buf = collections.deque(maxlen=5000)
+        self._latest = None
+        self._new = threading.Event()
+        self.algorithm, self.algorithm_error = "none", ""
+        if channel is not None:              # tests: a stand-in channel, events fed by hand
+            self.sp = channel
+            return
+        from Phidget22.Devices.Spatial import Spatial
+        self.sp = Spatial()
         try:
-            for name, cls in (("mag", Magnetometer), ("acc", Accelerometer), ("gyro", Gyroscope)):
-                c = cls()
-                if serial_number:
-                    c.setDeviceSerialNumber(int(serial_number))
-                c.openWaitForAttachment(5000)
-                self.ch[name] = c
-            # The 1044 may share one data rate between its channels: set all, then read back.
-            for c in self.ch.values():
-                c.setDataInterval(max(c.getMinDataInterval(), round(sample_dt_s * 1000)))
-            t0 = time.monotonic()
-            for name, getter in self.GETTERS.items():   # first sample takes a moment after attach
-                while True:
-                    try:
-                        getattr(self.ch[name], getter)()
-                        break
-                    except Exception:
-                        if time.monotonic() - t0 > 3:
-                            raise fs.ScanError(f"1044 {name} channel attached but sent no data within 3 s.")
-                        time.sleep(0.05)
+            if serial_number:
+                self.sp.setDeviceSerialNumber(int(serial_number))
+            self.sp.setOnSpatialDataHandler(self._on_data)
+            self.sp.openWaitForAttachment(5000)
+            self.sp.setDataInterval(max(self.sp.getMinDataInterval(), round(sample_dt_s * 1000)))
+            if algorithm != "none":
+                from Phidget22.SpatialAlgorithm import SpatialAlgorithm
+                try:
+                    self.sp.setAlgorithm({"imu": SpatialAlgorithm.SPATIAL_ALGORITHM_IMU,
+                                          "ahrs": SpatialAlgorithm.SPATIAL_ALGORITHM_AHRS}[algorithm])
+                    self.algorithm = algorithm
+                except Exception as e:      # not supported: log acceleration pitch/roll only
+                    self.algorithm_error = str(e)
+                    print(f"WARNING: the 1044 would not run the {algorithm} algorithm ({e}); "
+                          "pitch_deg/roll_deg will be NaN, acc_pitch_deg/acc_roll_deg still work.")
+            if not self._new.wait(3.0):     # first event takes a moment after attach
+                raise fs.ScanError("1044 Spatial channel attached but sent no data within 3 s.")
         except Exception:
             self.close()
             raise
 
+    def _on_data(self, ch, acceleration, angularRate, magneticField, timestamp):
+        ev = (tuple(acceleration), tuple(angularRate), tuple(magneticField), timestamp)
+        with self._lock:
+            self._buf.append(ev)
+            self._latest = ev
+        self._new.set()
+
     def info(self):
-        m = self.ch["mag"]
-        d = {"serial": m.getDeviceSerialNumber(), "name": m.getDeviceName(),
-             "data_interval_ms": {k: c.getDataInterval() for k, c in self.ch.items()}}
-        for key, ch, getter in (("max_field_G", "mag", "getMaxMagneticField"),
-                                ("max_accel_g", "acc", "getMaxAcceleration"),
-                                ("max_rate_dps", "gyro", "getMaxAngularRate")):
+        d = {"channel": "Spatial", "algorithm": self.algorithm}
+        if self.algorithm_error:
+            d["algorithm_error"] = self.algorithm_error
+        for key, getter in (("serial", "getDeviceSerialNumber"), ("name", "getDeviceName"),
+                            ("data_interval_ms", "getDataInterval"),
+                            ("max_field_G", "getMaxMagneticField"),
+                            ("max_accel_g", "getMaxAcceleration"),
+                            ("max_rate_dps", "getMaxAngularRate")):
             try:
-                d[key] = getattr(self.ch[ch], getter)()
+                d[key] = getattr(self.sp, getter)()
             except Exception:
                 pass
         return d
 
-    def mag(self):
-        return tuple(self.ch["mag"].getMagneticField())
-
-    def accel(self):
-        return tuple(self.ch["acc"].getAcceleration())
-
     def gyro(self):
-        return tuple(self.ch["gyro"].getAngularRate())
+        """Latest angular rate (deg/s), for the settle wait."""
+        with self._lock:
+            ev = self._latest
+        if ev is None or not _known(ev[1]):
+            raise fs.ScanError("no gyro reading")
+        return ev[1]
+
+    def euler(self):
+        """(pitch, roll) in degrees from the board's filter, or None."""
+        if self.algorithm == "none":
+            return None
+        try:
+            e = self.sp.getEulerAngles()
+            return (e.pitch, e.roll)
+        except Exception:
+            return None
+
+    def samples(self, n, dt_s, clock=None):
+        """The next n events after this call: lists of field, acceleration, angular
+        rate and (pitch, roll). Unknown values are left out, per sensor."""
+        with self._lock:
+            self._buf.clear()
+        got, E = [], []
+        deadline = time.monotonic() + max(3.0, 5 * n * max(dt_s, 0.004))
+        while len(got) < n and time.monotonic() < deadline:
+            time.sleep(max(dt_s, 0.004))
+            with self._lock:
+                got.extend(self._buf)
+                self._buf.clear()
+            e = self.euler()
+            if e is not None and _known(e):
+                E.append(e)
+        got = got[:n]
+        return ([ev[2] for ev in got if _known(ev[2])], [ev[0] for ev in got if _known(ev[0])],
+                [ev[1] for ev in got if _known(ev[1])], E)
 
     def zero_gyro(self, clock=Clock):
-        self.ch["gyro"].zero()      # Phidget: re-zeros in 1-2 s, board must be still
+        self.sp.zeroGyro()          # Phidget: re-zeros in 1-2 s, board must be still
         clock.sleep(2.5)
 
     def after_move(self):
         pass
 
     def close(self):
-        for c in self.ch.values():
-            try:
-                c.close()
-            except Exception:
-                pass
+        try:
+            self.sp.close()
+        except Exception:
+            pass
 
 
 # --------------------------------------------------------------------------
@@ -182,24 +240,48 @@ def wait_settled(sensor, cfg, clock=Clock):
         clock.sleep(max(cfg.sample_dt_s, 0.01))
 
 
-def read_point(sensor, n, dt_s, clock=Clock):
-    """n samples dt_s apart of field, acceleration and gyro, read in the same loop.
-    Returns (B mean, B std, n_B, a mean, a std, gyro rms, gyro max). Readings the
-    sensor rejects are dropped (per sensor)."""
-    B, A, W = [], [], []
+def _known(v):
+    return all(math.isfinite(x) and abs(x) < UNKNOWN for x in v)
+
+
+def accel_pitch_roll(a):
+    """Pitch (about sensor y) and roll (about sensor x), degrees, from a gravity
+    vector. Works whichever way up the board reads 1 g (the sign of az)."""
+    ax, ay, az = a
+    if not all(math.isfinite(v) for v in a) or _norm(a) == 0:
+        return math.nan, math.nan
+    s = 1.0 if az >= 0 else -1.0
+    return (math.degrees(math.atan2(-s * ax, math.hypot(ay, az))),
+            math.degrees(math.atan2(s * ay, abs(az))))
+
+
+def poll_samples(sensor, n, dt_s, clock=Clock):
+    """samples() for a sensor with mag()/accel()/gyro()/euler() getters (the simulation)."""
+    B, A, W, E = [], [], [], []
     for _ in range(n):
-        for read, store in ((sensor.mag, B), (sensor.accel, A), (sensor.gyro, W)):
+        for read, store in ((sensor.mag, B), (sensor.accel, A), (sensor.gyro, W), (sensor.euler, E)):
             try:
-                store.append(read())
+                v = read()
+                if v is not None and _known(v):
+                    store.append(v)
             except Exception:
                 pass
         clock.sleep(dt_s)
+    return B, A, W, E
+
+
+def read_point(sensor, n, dt_s, clock=Clock):
+    """Average n samples of field, acceleration, gyro and pitch/roll."""
+    B, A, W, E = sensor.samples(n, dt_s, clock)
     Bm, Bs = _mean_std(B)
     Am, As = _mean_std(A)
     rates = [_norm(w) for w in W]
-    g_rms = math.sqrt(statistics.fmean(r * r for r in rates)) if rates else math.nan
-    g_max = max(rates) if rates else math.nan
-    return Bm, Bs, len(B), Am, As, g_rms, g_max
+    pitch = statistics.fmean(e[0] for e in E) if E else math.nan
+    roll = statistics.fmean(e[1] for e in E) if E else math.nan
+    return {"B": Bm, "Bsd": Bs, "n": len(B), "a": Am, "asd": As,
+            "g_rms": math.sqrt(statistics.fmean(r * r for r in rates)) if rates else math.nan,
+            "g_max": max(rates) if rates else math.nan,
+            "pitch": pitch, "roll": roll, "acc_pr": accel_pitch_roll(Am)}
 
 
 # --------------------------------------------------------------------------
@@ -246,8 +328,8 @@ def run_scan(link, sensor, cfg, label="scan", note="", coil_current_A=None,
         "label": label, "note": note, "started": datetime.now().isoformat(timespec="seconds"),
         "coil_current_A": coil_current_A, "n_points": n, "csv": csv_path.name,
         "script": "TiltScan/field_scan_tilt.py",
-        "frame": "sensor axes, raw: B in gauss, acceleration in g, angular rate in deg/s "
-                 "(tilt_correct.m and R_sensor_to_robot in MATLAB)",
+        "frame": "sensor axes, raw: B in gauss, acceleration in g, angular rate in deg/s, "
+                 "pitch/roll in deg (tilt_correct.m and R_sensor_to_robot in MATLAB)",
         "config": asdict(cfg), "sensor": sensor.info() if hasattr(sensor, "info") else {},
         "geometry": fs.CALIBRATED_GEOMETRY,
         "correction": dict(corr.info(), points_outside_valid_box=n_outside,
@@ -283,29 +365,33 @@ def run_scan(link, sensor, cfg, label="scan", note="", coil_current_A=None,
                     err, st = fs.move_probe(link, cfg, send)
                     sensor.after_move()
                 if err == 1:
-                    B, Bsd, ns, a, asd, g_rms, g_max = nan3, nan3, 0, nan3, nan3, math.nan, math.nan
+                    r = {"B": nan3, "Bsd": nan3, "n": 0, "a": nan3, "asd": nan3, "g_rms": math.nan,
+                         "g_max": math.nan, "pitch": math.nan, "roll": math.nan,
+                         "acc_pr": (math.nan, math.nan)}
                     waited, settled = 0.0, -1
                     n_skipped += 1
                 else:
                     waited, settled = wait_settled(sensor, cfg, clock)
                     n_unsettled += settled == 0
-                    B, Bsd, ns, a, asd, g_rms, g_max = read_point(sensor, cfg.n_avg, cfg.sample_dt_s, clock)
+                    r = read_point(sensor, cfg.n_avg, cfg.sample_dt_s, clock)
+                B = r["B"]
                 deg = list(st.get("deg", nan3))
                 w.writerow([k, *(f"{v:.2f}" for v in p),
-                            *(f"{v:.6f}" for v in B), *(f"{v:.6f}" for v in Bsd),
-                            err, f"{clock.now() - t_scan:.2f}", ns,
+                            *(f"{v:.6f}" for v in B), *(f"{v:.6f}" for v in r["Bsd"]),
+                            err, f"{clock.now() - t_scan:.2f}", r["n"],
                             *(f"{d:.3f}" for d in deg),
                             *(f"{v:.2f}" for v in (send or nan3)),
-                            *(f"{v:.6f}" for v in a), *(f"{v:.6f}" for v in asd),
-                            f"{g_rms:.4f}", f"{g_max:.4f}", f"{waited:.2f}", settled])
+                            *(f"{v:.6f}" for v in r["a"]), *(f"{v:.6f}" for v in r["asd"]),
+                            f"{r['g_rms']:.4f}", f"{r['g_max']:.4f}", f"{waited:.2f}", settled,
+                            f"{r['pitch']:.4f}", f"{r['roll']:.4f}",
+                            *(f"{v:.4f}" for v in r["acc_pr"])])
                 f.flush()
                 meta["points_done"] = k
-                an = _norm(a)
-                tilt = math.degrees(math.acos(min(1.0, abs(a[2]) / an))) if an > 0 else math.nan
+                pr = (r["pitch"], r["roll"]) if math.isfinite(r["pitch"]) else r["acc_pr"]
                 eta = (clock.now() - t_scan) / k * (n - k)
                 out(f"{k:4d}/{n}  [{p[0]:7.1f} {p[1]:7.1f} {p[2]:7.1f}]  "
-                    f"|B| = {_norm(B):.4f} G  tilt from sensor z {tilt:6.3f} deg  "
-                    f"gyro {g_rms:.2f} deg/s  settle {waited:.1f} s{'' if settled else ' (gyro not quiet)'}  "
+                    f"|B| = {_norm(B):.4f} G  pitch {pr[0]:7.3f}  roll {pr[1]:7.3f} deg  "
+                    f"gyro {r['g_rms']:.2f} deg/s  settle {waited:.1f} s{'' if settled else ' (gyro not quiet)'}  "
                     f"e={err}  ({eta:.0f} s left)")
     except KeyboardInterrupt:
         meta["aborted"] = True
@@ -393,6 +479,14 @@ class FakeTiltSensor:
         amp = self.ring * math.exp(-(self.clock.now() - self.t_move) / self.tau)
         return tuple(amp * d + self.r.gauss(0, self.noise_w) for d in (0.6, 0.8, 0.0))
 
+    def euler(self):
+        """(pitch, roll) as an IMU filter would give them (simulation: true tilt + noise)."""
+        x, y, _ = self.link.pos or (0.0, 0.0, -650.0)
+        return (self.k * x + self.r.gauss(0, 0.01), -self.k * y + self.r.gauss(0, 0.01))
+
+    def samples(self, n, dt_s, clock=None):
+        return poll_samples(self, n, dt_s, clock or self.clock)
+
     def zero_gyro(self, clock=None):
         pass
 
@@ -419,6 +513,9 @@ def main(argv=None):
     ap.add_argument("--still", type=float, default=cfg.still_s, help="gyro mode: how long it must stay quiet, s")
     ap.add_argument("--settle-min", type=float, default=cfg.settle_min_s, help="gyro mode: shortest wait, s")
     ap.add_argument("--no-zero-gyro", action="store_true", help="don't zero the gyro at the park position")
+    ap.add_argument("--algorithm", choices=ALGORITHMS, default=cfg.algorithm,
+                    help="board's orientation filter for pitch/roll: imu (accel + gyro, default), "
+                         "ahrs (also uses the magnetometer, which the magnet disturbs) or none")
     ap.add_argument("--n-avg", type=int, default=cfg.n_avg)
     ap.add_argument("--mag-serial", type=int, default=cfg.mag_serial)
     ap.add_argument("--out-dir", default=cfg.out_dir)
@@ -433,6 +530,7 @@ def main(argv=None):
     cfg.port, cfg.speed_v, cfg.settle_s = a.port, a.speed, a.settle
     cfg.gyro_settle_dps, cfg.still_s, cfg.settle_min_s = a.gyro_settle, a.still, a.settle_min
     cfg.zero_gyro = not a.no_zero_gyro
+    cfg.algorithm = a.algorithm
     cfg.n_avg, cfg.mag_serial, cfg.out_dir = a.n_avg, a.mag_serial, a.out_dir
     cfg.correction = a.correction
     for axis, v in (("x", a.x), ("y", a.y), ("z", a.z)):
@@ -447,7 +545,7 @@ def main(argv=None):
         confirm = lambda prompt="": None
     else:
         clock = Clock
-        sensor = Phidget1044Tilt(cfg.mag_serial, cfg.sample_dt_s)   # sensor first: fail before the robot moves
+        sensor = Phidget1044Spatial(cfg.mag_serial, cfg.sample_dt_s, cfg.algorithm)   # sensor first: fail before the robot moves
         link = fs.DeltaLink(cfg.port)
         confirm = input
     try:

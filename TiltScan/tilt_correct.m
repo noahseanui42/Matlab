@@ -17,6 +17,13 @@ function S = tilt_correct(dataFile, varargin)
 %   B_corr_G       B rotated by that rotation, i.e. the field the sensor would have
 %                  read at the reference orientation
 %
+%   pitch_deg, roll_deg          as logged by the board's IMU/AHRS filter (absolute)
+%   acc_pitch_deg, acc_roll_deg  as logged, from the acceleration (absolute)
+%
+% The correction uses the gravity vector (ax_g..az_g) rather than the pitch/roll
+% columns: it is the same information while the probe is still, and it doesn't
+% depend on the board's angle convention.
+%
 % Only tilt (roll and pitch) can be seen this way. A turn about the vertical leaves
 % gravity unchanged, so it is neither measured nor corrected.
 %
@@ -85,6 +92,10 @@ S.B_raw_G = B;
 S.B_corr_G = Bc;
 S.ok = ok;
 S.out_file = '';
+% pitch and roll as logged (board filter, and from the acceleration), NaN if absent
+for nm = {'pitch_deg', 'roll_deg', 'acc_pitch_deg', 'acc_roll_deg'}
+    if isfield(T, nm{1}), S.(nm{1}) = T.(nm{1}); else, S.(nm{1}) = nan(N, 1); end
+end
 
 d = tiltDeg(ok);
 fprintf('%s: tilt relative to the reference, %d points: median %.3f deg, max %.3f deg\n', ...
