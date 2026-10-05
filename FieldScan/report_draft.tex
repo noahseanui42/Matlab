@@ -1,0 +1,393 @@
+% ENGR489 final report, working draft (IEEEtran).
+% Text marked [TODO: ...] needs data or a fact only the author has.
+% Text marked [CHECK: ...] is drafted from the repo but conflicts with, or is not
+% confirmed by, another source. Resolve each before submission.
+\documentclass[conference]{IEEEtran}
+\usepackage{amsmath,graphicx,booktabs,siunitx,cite,url}
+\sisetup{detect-all}
+
+\begin{document}
+
+\title{Design of a Robotic Platform for Magnetic Field Mapping in a Helmholtz Coil System}
+\author{\IEEEauthorblockN{Noah-S\={e}a Nui}
+\IEEEauthorblockA{Supervised by Christopher Hollitt\\
+School of Engineering and Computer Science, Victoria University of Wellington}}
+\maketitle
+
+\begin{abstract}
+Mapping the field of a Helmholtz cage by hand is slow and its results depend on the
+operator. This project built a delta robot to position a three-axis magnetometer
+automatically. The arms are 3D-printed PLA and carbon-fibre tube, and the probe sits
+on a PLA holder, so no ferromagnetic material is near the sensor. Three hobby servos
+move the probe to the points of a Cartesian grid through a closed-form inverse
+kinematic solution. A host program moves, waits, averages 20 readings and logs each
+point. With a position correction fitted to the as-built robot, the corner error of a
+$100\times 100$\,mm scan box fell from about \SI{19}{mm} to \SI{2.3}{mm} rms, and
+repeatability was \SIrange{2}{2.5}{mm}. This does not meet the \SI{1}{mm}
+requirement. A 75-point scan takes about \SI{14}{min}. Repeated scans of a fixed
+magnet agreed to \SI{0.32}{\micro T} rms in $|B|$.
+[TODO: finish with the in-cage robot-interference and field-vs-theory results once measured.]
+\end{abstract}
+
+\begin{IEEEkeywords}
+Delta robot, magnetic field mapping, Helmholtz coil, parallel kinematics, magnetometer.
+\end{IEEEkeywords}
+
+\section{Introduction}
+\subsection{Motivation}
+Helmholtz cages produce a nearly uniform field and are used to calibrate magnetic
+sensors and to test CubeSat attitude determination and control systems.
+The VUW three-axis cage was built in 2025 [TODO: cite the 2025 report].
+Its uniformity was measured by hand on a \SI{2}{cm} grid over three planes, which took
+about one hour, and probe misorientation was identified as a source of error.
+That report recommended an automated, motorised mapping system as future work.
+This project delivers that system.
+
+\subsection{Problem Statement}
+Manual mapping limits resolution, repeatability and orientation consistency. A
+mapping system must also not disturb the field it measures, so every part near the
+probe has to be non-ferromagnetic.
+
+\subsection{Requirements}
+The platform was required to:
+\begin{itemize}
+\item position a three-axis magnetometer with accuracy of the order of \SI{1}{mm}
+within a $100\,\mathrm{mm}\times100\,\mathrm{mm}\times300\,\mathrm{mm}$ test volume;
+\item measure the field vector $(B_x,B_y,B_z)$ at discrete grid points;
+\item provide an adjustable scan resolution;
+\item minimise magnetic interference introduced by the platform; and
+\item produce repeatable measurements across multiple scans.
+\end{itemize}
+The project budget was \$500. [TODO: state the safety requirement if one was set; the
+firmware has no hardware E-stop, only the servo-power switch and a software disable.]
+
+\subsection{Summary of Outcomes}
+A delta robot was built and driven by an Arduino UNO R4 Minima. Grid scanning,
+adjustable resolution, non-magnetic construction and scan repeatability were achieved.
+Positioning accuracy and the \SI{300}{mm} depth were only partly met: after correction
+the robot reached the full $100\times299$\,mm box at $z=\SI{-650}{mm}$ with a corner
+error of \SI{2.3}{mm} rms against the \SI{1}{mm} target. [CHECK: the draft earlier quoted
+a reachable depth of \SI{276}{mm}; the firmware README gives $z\approx-550$ to
+\SI{-793}{mm} on axis and the correction validation gives \SI{299}{mm}. Use one
+measured figure.] [TODO: headline in-cage numbers.]
+
+\subsection{Sustainability}
+The work relates to UN SDG 9 (industry, innovation and infrastructure) because it
+gives a low-cost automated alternative to commercial mapping equipment
+[TODO: cite UN SDGs]. It relates to SDG 4 (quality education) if the platform is reused in teaching labs. The other goals are
+not materially affected by a laboratory instrument of this size.
+
+\begin{table}[t]
+\caption{Performance metrics and their relevance to the project requirements.}
+\label{tab:metrics}
+\centering\small
+\begin{tabular}{p{0.38\columnwidth}p{0.52\columnwidth}}
+\toprule
+Metric & Justification \\
+\midrule
+Positioning accuracy (mm) & Direct measure of the \SI{1}{mm} requirement \\
+Positioning repeatability (mm) & Separates random error from correctable bias \\
+Reachable workspace (mm) & Must cover the $100\times100\times300$\,mm volume \\
+Robot-induced field disturbance (nT) & Measures the non-interference requirement \\
+Field error vs theory, RMS and max (nT) & Checks the map against Eq.~(1) \\
+Scan repeatability (nT) & Measures the repeatability requirement \\
+Scan time per point (s) & Compared against the manual baseline \\
+Total cost (NZD) & Must stay within \$500 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Background and Related Work}
+\subsection{Helmholtz Coil Fields}
+[TODO: Present the square Helmholtz axial-field equation with its source, define each
+variable with units, and tabulate the VUW cage parameters (side length, separation,
+turns). Confirm the cage is unchanged since 2025.]
+\begin{equation}
+B_z = [\mathrm{TODO:\ equation}]
+\end{equation}
+
+\subsection{Existing Field Mapping Approaches}
+[TODO: Manual probing; Cartesian gantry mappers; serial robot arms; commercial
+Hall-probe mapping systems. For each give advantages, disadvantages, magnetic
+compatibility and cost. Cite real sources only.]
+
+\subsection{Delta Robots}
+The delta robot was invented by Clavel [1]. Three rotary actuators on a fixed base
+drive three parallel arm pairs that hold a small platform, which keeps the
+platform level and gives it three translational degrees of freedom. Deltas are
+common in pick-and-place machines and some 3D printers because the moving mass is
+low. The reachable workspace is a rounded volume, not a box.
+
+\subsection{Novelty of This Work}
+The platform is a delta robot built from PLA and carbon-fibre tube with no metal near
+the probe, designed for the VUW cage and costing a fraction of a commercial mapper.
+[TODO: confirm the cost figure and state clearly what is new relative to the sources
+in Section II-B.]
+
+\subsection{Performance Metrics}
+Table~\ref{tab:metrics} lists the metrics used in Section~VI.
+
+\section{Tools and Methodology}
+SolidWorks was used for the assembly, with mates for the ball joints, DXF export for
+laser cutting and STL export for printing. Printed holes were enlarged by
+\SI{0.2}{mm} so that fasteners and rod ends fit. Kinematics were simulated in MATLAB
+and Python, adapted from the open-source project of Wrona and Radziwi\l{}\l{}ko [2].
+The firmware targets an Arduino UNO R4 Minima and was built with the Arduino IDE.
+The magnetometer is a Phidget 1044 (PhidgetSpatial Precision 3/3/3, serial 302277),
+read through the Phidget22 API. Code is under Git.
+[TODO: GitLab link.]
+
+\begin{figure}[t]
+\centering
+[TODO: architecture diagram]
+\caption{System architecture of the field mapping platform.}
+\end{figure}
+
+\section{Design}
+\subsection{System Architecture}
+The host PC runs the scan program. It sends framed JSON commands over USB CDC serial
+to the R4 Minima, which generates PWM on D9, D10 and D11 for the three servos. The
+firmware streams a status line every \SI{20}{ms}. The servos run from a separate 6\,V
+AA pack with a common ground. The Phidget 1044 connects to the host directly over USB,
+not through the Arduino. [TODO: potentiometer feedback on A0; it is not used by the v1
+firmware, which is open loop.]
+
+\subsection{Revised Architecture Selection}
+The project proposal selected a three-axis Cartesian gantry, on the basis that its
+decoupled linear axes give a direct relationship between actuator displacement and
+probe position. Parallel robots, including the delta configuration, were rejected at
+that stage because of their coupled, nonlinear kinematics, their non-rectangular
+workspace, and the presence of linkages around the measurement volume.
+
+During detailed design, the gantry could not be delivered within the ENGR489 budget of
+\$500. The aluminium support structure needed to hold three axes rigidly above the
+Helmholtz coil, together with the linear rails, belts, pulleys and lead screw, brought
+the costed design to approximately \$[TODO: X]. Several redesigns were attempted,
+including [TODO: e.g.\ shorter travel, lower-cost rails], but none brought the design
+within budget without compromising rigidity.
+
+A delta robot was therefore adopted. It uses three rotary actuators fixed to a
+stationary base, so the three Futaba S3306MG servos already available to the project
+could drive the arms directly, with no rotary-to-linear conversion. The arms were
+built from 3D-printed PLA and carbon-fibre tube. The final cost of the platform was
+\$[TODO: Y]. The proposal's objections were addressed as follows:
+\begin{itemize}
+\item \emph{Nonlinear kinematics:} an inverse kinematic solution adapted from [2]
+converts Cartesian targets into servo angles (Section IV-C), so scans are still
+defined on a Cartesian grid.
+\item \emph{Non-rectangular workspace:} the reachable workspace was analysed for the
+as-built geometry (Section IV-D). [CHECK: depth figure, see Section I-D.] The shortfall
+against the \SI{300}{mm} target is a direct consequence of the change in architecture
+and is discussed in Section VI-G.
+\item \emph{Linkages near the measurement volume:} the effect of the robot on the field
+was to be quantified experimentally (Section VI-D).
+\end{itemize}
+The change traded a simpler kinematic model and a guaranteed rectangular workspace for
+a design that was affordable and reused existing actuators.
+
+\begin{table}[t]
+\caption{As-built geometric parameters of the delta robot.}
+\label{tab:geom}
+\centering\small
+\begin{tabular}{lr}
+\toprule
+Parameter & Value (mm) \\
+\midrule
+Base triangle side, $s_b$ & 175 \\
+Platform triangle side, $s_p$ & 75 \\
+Upper arm length, $L_1$ & 177 \\
+Forearm length, $L_2$ & 625 \\
+Probe offset below platform joint centre & 21 \\
+\bottomrule
+\end{tabular}
+\end{table}
+[CHECK: values are from the calibrated firmware recorded in the scan metadata
+(branch \texttt{claude/amazing-lovelace-onixrv}). The \texttt{engr489-firmware}
+copy on this branch still has $s_p=150$, $L_1=180$. Project notes list $s_b=450$,
+$s_p=18$, $L_1=180$, $L_2=600$. Confirm against the physical robot and keep one table.]
+
+\subsection{Kinematics}
+Each arm $i$ is a bicep of length $L_1$ rotating about a horizontal axis on the base
+triangle, and a forearm of length $L_2$ joining the elbow to the platform. For a platform
+position $(x,y,z)$ the closed loop gives, per arm,
+\begin{equation}
+E_i\cos\theta_i + F_i\sin\theta_i + G_i = 0,
+\end{equation}
+with $E_i$, $F_i$, $G_i$ functions of $(x,y,z)$ and the geometry of Table~\ref{tab:geom}.
+Substituting $t=\tan(\theta_i/2)$ gives
+\begin{equation}
+\theta_i = 2\arctan\frac{-F_i\pm\sqrt{E_i^2+F_i^2-G_i^2}}{G_i-E_i}.
+\end{equation}
+The firmware tries the $+$ root first and the $-$ root if the first is outside the
+servo limits, and rejects the point if neither is real and in range. [TODO: write
+out $E_i,F_i,G_i$ from \texttt{kinematics.cpp} with units, and define $\theta$ sign
+convention: positive is bicep down.] Servo pulse width is linear in angle,
+$\mu_i = c_i + k_i\theta_i$, with $c_i$ the pulse for a level bicep and $k_i$ in
+\SI{}{\micro s/deg}.
+
+\subsection{Workspace Analysis}
+Reach was found by evaluating the inverse kinematics over a grid. Limits come from
+the servo angle range of $-20^\circ$ to $70^\circ$ (set by horn fouling and the plate
+slot, measured with all three arms enabled; single-arm limits were falsely tight because
+the plate sagged), the real-root condition and the frame window.
+[TODO: plot of reachable volume against the target box, and the $s_b/L$ trade-offs.]
+
+\subsection{Mechanical Design}
+[TODO: Top plate (acrylic prototype, aluminium final); servo mounting and arm slots;
+bicep box section; elbow yoke in double shear; carbon-fibre forearms bonded into bored
+rod ends; bonding jig; probe holder; stand of 2020 extrusion legs at $120^\circ$.]
+
+\subsection{Material Selection and Magnetic Considerations}
+The non-ferromagnetic rule was the main design driver. [TODO: table of materials by
+component.] Moving parts near the probe are PLA, carbon fibre, nylon and aluminium.
+The known compromise is the SIL6T/K M6 rod ends, whose balls are steel. They were
+accepted for this build and should be replaced by plastic or non-ferrous joints.
+The servos contain magnets; their effect appears in the baseline scan (Section VI-D).
+
+\subsection{Electronics}
+The UNO R4 Minima was chosen over the R4 WiFi to avoid RF emission near the
+magnetometer. Servo power is separate from logic power, with a shared ground.
+Brown-out of the 4$\times$AA supply under servo load is a known failure mode.
+[TODO: potentiometer feedback modification and voltage range; E-stop.]
+
+\subsection{Sustainability Considerations}
+[TODO: Environmental: PLA and the disposable AA pack (recommend rechargeable).
+Economic: cost against the gantry and commercial systems. Technical: off-the-shelf
+parts, open-source code, replaceable printed parts. Social: argue relevance or not.]
+
+\section{Implementation}
+\subsection{Mechanical Build}
+[TODO: Fabrication steps, photos, problems met and fixes.]
+
+\subsection{Firmware}
+The sketch is split into host-testable modules: kinematics, a frame parser, and a
+motion planner, with only the \texttt{.ino} file touching \texttt{Servo} and
+\texttt{Serial}. It keeps the serial protocol of [2] byte-for-byte so the upstream
+Python GUI still works, and replaces the stepper control with servo pulses clamped to
+\SIrange{830}{2170}{\micro s}. [CHECK: the draft said 800--2200\,$\mu$s and EEPROM
+storage; \texttt{config.h} has 830--2170\,$\mu$s and the calibration is compiled in,
+EEPROM is listed as future work.] Moves are planned with a smoothstep profile at a tick
+of \SI{20}{ms}, and a status field reports errors such as an unreachable target. Ten
+host-side test groups cover kinematics, parity between the C++ and Python solutions,
+the parser and the planner. [TODO: GitLab link.]
+
+\subsection{Servo Calibration}
+Each servo was calibrated with an angle finder on the bicep. The pulse width at
+level was found first, then a five-point linear fit at 1200, 1360, 1520, 1680 and
+\SI{1840}{\micro s} gave the slope. Angle limits were then found with all three arms
+enabled. Table~\ref{tab:cal} gives the final values.
+\begin{table}[t]
+\caption{Servo calibration (calibrated firmware).}
+\label{tab:cal}
+\centering\small
+\begin{tabular}{lccc}
+\toprule
+Arm (pin) & $c_i$ ($\mu$s) & $k_i$ ($\mu$s/deg) & Limits (deg) \\
+\midrule
+1 (D9)  & 1456 & 9.8315 & $-20$ to 70 \\
+2 (D10) & 1373 & 9.7664 & $-20$ to 70 \\
+3 (D11) & 1393 & 9.6658 & $-20$ to 70 \\
+\bottomrule
+\end{tabular}
+\end{table}
+[TODO: fit residuals and the exit criteria used.]
+
+\subsection{Host Software and Scan Routine}
+\texttt{field\_scan.py} opens the magnetometer, then the robot, parks at
+$(0,0,-650)$\,mm, and visits the grid in serpentine order. At each point it sends a
+move, waits for the robot to report that it has stopped, settles for \SI{5}{s},
+averages 20 readings taken \SI{20}{ms} apart, and appends one CSV row. Unreachable
+points are logged as NaN. Each scan writes a metadata file with every setting,
+the sensor range and the firmware geometry. MATLAB scripts subtract a
+baseline scan matched by position and plot layers, side views and 3D arrows.
+The grid is defined in probe coordinates; the commanded platform position is the
+probe position less the \SI{21}{mm} offset. A \SI{0.5}{s} settle was tried first and
+replaced by \SI{5}{s} because the probe was still moving.
+[TODO: confirm the reason for the change and describe the CSV columns in a table.]
+
+\section{Evaluation}
+\subsection{Test Setup}
+All scans so far were run with the robot outside the cage, coils off, a strong
+permanent magnet near the probe as the field source, and a no-magnet baseline.
+Each scan covers $5\times5\times3$ points at $x,y\in[-50,50]$\,mm and
+$z\in[-675,-625]$\,mm (75 points). [TODO: photo; in-cage test conditions.]
+
+\subsection{Positioning Accuracy and Repeatability}
+Position was checked with a pen and ruler over $x\pm50$, $y\pm150$ and
+$z=-600$ to \SI{-700}{mm}. Without correction the servos give way under load off
+centre and the corners of the box land about \SI{19}{mm} inside the target. The
+\texttt{hybrid} correction predicts each servo's shortfall from the Jacobian and aims
+past the target by that amount. It reduced the corner error to \SI{2.3}{mm} rms,
+with about \SI{5}{mm} left at the box centre at $z=-650$\,mm caused by platform tilt.
+Repeatability was \SIrange{2}{2.5}{mm}. The \SI{1}{mm} accuracy requirement was
+therefore not met. [TODO: tabulate commanded vs measured points and a return-to-point
+test; cite the calibration notes.]
+
+\subsection{Achieved Workspace}
+With the corrected limits the on-axis reach is $z\approx-550$ to \SI{-793}{mm}, and
+about 89\,\% of a $\pm150$\,mm by $z\in[-790,-550]$\,mm grid is reachable. The
+corrected scan box is $100\times299$\,mm at $z=-650$. [TODO: measured against
+predicted reach; resolve the \SI{276}{mm} figure.]
+
+\subsection{Robot-Induced Field Disturbance}
+Not yet measured in the cage. [TODO: robot present vs absent, powered vs unpowered,
+against the sensor noise floor.] In the bench scans, the mean reading with no magnet
+was \SI{72.0}{\micro T}, close to the expected Earth field of \SIrange{55}{60}{\micro T}
+plus the contribution of the servo magnets and sensor offset [TODO: attribute the
+\SI{12}{\micro T} excess]. The per-point noise of the 20-reading average was
+\SIrange{0.06}{0.10}{\micro T} per axis, which sets the noise floor.
+
+\subsection{Field Map and Comparison with Theory}
+[TODO: Field maps; RMS and max error vs Eq.~(1); uniformity as percent deviation
+from the centre value. Requires coil-on scans in the cage.]
+
+\subsection{Scan Repeatability and Scan Time}
+Table~\ref{tab:rep} gives the difference in $|B|$ between repeated scans of the same
+grid with a fixed magnet. The uncorrected pair differed by \SI{0.32}{\micro T} rms
+(\SI{0.89}{\micro T} max) and the corrected pair by \SI{0.28}{\micro T} rms
+(\SI{0.74}{\micro T} max). The field varies from \SI{73}{\micro T} to
+\SI{87}{\micro T} over the grid, so the repeat error is about 2\,\% of the span.
+A scan of 75 points took \SIrange{830}{862}{s}, or \SI{11.1}{s} to \SI{11.5}{s} per
+point, dominated by the \SI{5}{s} settle. [TODO: compare with the one-hour manual
+baseline in the 2025 report, and give the number of points in that scan.]
+\begin{table}[t]
+\caption{Difference in $|B|$ between repeated 75-point scans (strong magnet, coils off).}
+\label{tab:rep}
+\centering\small
+\begin{tabular}{lcc}
+\toprule
+Pair & RMS ($\mu$T) & Max ($\mu$T) \\
+\midrule
+No correction, run 1 vs 2 & 0.32 & 0.89 \\
+Hybrid correction, run 1 vs 2 & 0.28 & 0.74 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Limitations and Future Improvements}
+\begin{itemize}
+\item \emph{Accuracy:} \SI{2.3}{mm} rms against \SI{1}{mm}. The servos deflect under
+load and the platform tilts; stiffer servos or closed-loop control on the
+potentiometers would help.
+\item \emph{Workspace:} geometry change to reach the full \SI{300}{mm} depth. [TODO]
+\item \emph{Rod ends:} replace the steel-ball rod ends.
+\item \emph{Servo resolution and deadband,} and open-loop control.
+\item \emph{Supply:} AA pack sags under load.
+\item \emph{Sensor noise} and the untested in-cage disturbance.
+\end{itemize}
+
+\section{Discussion}
+[TODO: Were the design choices right in hindsight? Was the proposal's view of delta
+robots correct? Sustainability impact. Note that the proposal's concern about coupled
+kinematics was handled in software, but the concern about positioning accuracy
+appeared in a different form: servo compliance, which a gantry would not have.]
+
+\section{Conclusion}
+[TODO: Objectives vs outcomes, one short paragraph each.]
+
+\begin{thebibliography}{1}
+\bibitem{clavel} R. Clavel, ``Device for the movement and positioning of an element in space,'' U.S.\ Patent 4\,976\,582, Dec.\ 11, 1990.
+\bibitem{delta} J. Wrona and G. Radziwi\l{}\l{}ko, ``Delta-Robot,'' GitHub repository, commit 48a8038. [Online]. Available: https://github.com/grzesiek2201/Delta-Robot
+\end{thebibliography}
+
+\end{document}
