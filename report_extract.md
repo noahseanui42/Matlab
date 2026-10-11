@@ -3,7 +3,7 @@
 Generated 2026-10-11 from HEAD `8233655` (branch `claude/elegant-shannon-h3fw0o` = `master`).
 
 **Inputs read.** `Report.md` (your skeleton, called "skeleton" below) and `ENGR489_Literature_Notes.md` (your sources, called "sources" below). I assumed these are the files you named `skeleton.md` and `sources.md`. I read the skeleton in full and the sources index plus all note headings. I did not read every note body.
-**Repo read.** Every tracked file except the vendored `third_party/ArduinoJson` (143 files, skimmed only), all 46 commits (`git log --reverse --stat`, vendored library excluded from the stat), and the 20 scan CSV/JSON pairs (`FieldScan/data/`).
+**Repo read.** Every tracked file except the vendored `third_party/ArduinoJson` (143 files, skimmed only), all 46 commits (`git log --reverse --stat`, vendored library excluded from the stat), and the 15 scan CSV/JSON pairs (`FieldScan/data/`).
 
 **Citation key.**
 - `path:line` and `hash` are recorded evidence in the repo.
@@ -17,7 +17,7 @@ Generated 2026-10-11 from HEAD `8233655` (branch `claude/elegant-shannon-h3fw0o`
 
 1. **There is no `CLAUDE.md` in the repo, now or in any commit.** The repo's own notes are `FieldScan/HANDOFF.md`, `FieldScan/README.md` and `engr489-firmware/README.md`. The README/HANDOFF text cites "HANDOFF §4/§6/§9/§10/§11", a planning document that is **not in the repo**.
 2. **No plots are committed.** `git log --all` contains no png/jpg/pdf/svg/fig file. Every figure is regenerable only from scripts plus data (Section 7).
-3. **The calibrated firmware is not in this repo.** The robot that produced all the data ran branch `claude/amazing-lovelace-onixrv` (commits `a185b44` calibration refit, `ffe256b` upward approach), named in `pose_correction_hybrid.json:52` and `FieldScan/README.md:83-87`. This repo has only two branches (`master`, this one).
+3. **The calibrated firmware is not in this repo.** The robot that produced all the data ran branch `claude/amazing-lovelace-onixrv` (commits `a185b44` calibration refit, `ffe256b` upward approach), named in `pose_correction_hybrid.json:52` and `FieldScan/README.md:83-87`. Both commits exist, dated 2026-09-30, on `origin/claude/amazing-lovelace-onixrv`, a branch that is not merged into `master`; I did not read that branch's files.
    - HEAD `delta_servo/config.h` and `robot_config.py` still hold the **older** geometry (SP 150, L_UP 180, no arm remap, first-pass servo calibration) (`config.h:14-15,35-37`).
    - `pose_correction.py:23-29` and `field_scan.py:51-54` say so explicitly.
 4. **Most of the skeleton's calibration and validation numbers have no primary data or code here.**
@@ -113,7 +113,7 @@ Generated 2026-10-11 from HEAD `8233655` (branch `claude/elegant-shannon-h3fw0o`
 | D6 | Control stack | Keep upstream GUI and **byte-identical serial protocol** | – | "so the upstream Python GUI drives this robot with only the patches". A from-scratch stack with a layered safety design is **not in the repo** (nor in any commit) | `README.md:5-9` |
 | D7 | Code structure | `kinematics`/`protocol`/`motion` without Arduino headers; only `.ino` touches `Servo`/`Serial`/`millis` | – | Host-testable with plain `g++` | `README.md:49-51`; `config.h:4-6` |
 | D8 | Unreachable moves | IK returns false with **no partial angle write**; move rejected, error latch `e=1`; scan logs NaN | (upstream relied on NaN comparisons) | Guards "instead of relying on NaN comparisons" (HANDOFF §6.2, not in repo). Why reject rather than clamp: rationale not recorded | `kinematics.cpp:4-7,80-83`; `field_scan.py:371-376` |
-| D9 | Joint vs linear moves | Scan uses joint moves (`i=0`) | Linear mode | "Linear moves can stop early near the workspace edge (`e=2`)" | `HANDOFF.md:50`; `README.md:253-254`; `motion.cpp:261-266` |
+| D9 | Joint vs linear moves | Scan uses joint moves (`i=0`) | Linear mode | "Linear moves can stop early near the workspace edge (`e=2`)" | `HANDOFF.md:50`; `README.md:256-257`; `motion.cpp:261-266` |
 | D10 | Joint limits | −20°/70° on all arms from **full 3-arm** assembly | Single-arm pass (−16…−25 / 26.5…29.5°); placeholder ±(−30,80) | Single-arm numbers false: with the other arms slack the plate sags/tilts into an early collision | `README.md:73-95,228-231`; `config.h:22-31`; `b0576f3` |
 | D11 | Servo write after `attach()` | `attach()` then `writeMicroseconds()` | Write before attach | R4 Servo library ignores writes before attach and starts at 1500 µs (checked against `ArduinoCore-renesas` source) | `README.md:152-167`; `delta_servo.ino:41-50` |
 | D12 | End of scan | Robot left **enabled** | Disable | "disabling lets the arms drop" | `field_scan.py:17,399-405`; `FieldScan/README.md:50-51` |
@@ -315,9 +315,9 @@ Scripts: `report_extract_scripts/scan_stats.py`, `compare_runs_replica.py`, `ins
 | Script | Figures | Intended inputs | Committed data it can run on |
 |---|---|---|---|
 | `plot_field_map.m` | (1) 3D vectors coloured by \|B\|; (2) \|B\| slices through the centre; (3) % deviation from centre on the middle z plane, the "Helmholtz uniformity" plot (`:10-13`) | Coils-on CSV minus coils-off baseline (`FieldScan/README.md:96`) | Any scan; only magnet scans exist. `make_demo_scan.m` writes synthetic Helmholtz data to `data/demo_coils_on.csv`/`demo_baseline.csv` (not committed) |
-| `plot_field_layers.m` | (1) heat map per z layer; (2) direction map (arrows + Bz colour); (3) side views x-z or y-z; (4) stacked 3D map. `Save` writes PNGs | Magnet scan minus `no_magnet` scan (`:5-8`, README `:97-101`) | `2026-10-02_dryrun1_magnet_*` minus `2026-10-02_dryrun1_no_magnet.csv`; or `mag_off_1_*` |
+| `plot_field_layers.m` | (1) heat map per z layer; (2) direction map (arrows + Bz colour); (3) side views x-z or y-z; (4) stacked 3D map. `Save` writes PNGs | Magnet scan minus `no_magnet` scan (`:5-8`, `FieldScan/README.md:97-101`) | `2026-10-02_dryrun1_magnet_*` minus `2026-10-02_dryrun1_no_magnet.csv`; or `mag_off_1_*` |
 | `plot_field_arrows3d.m` | One 3D arrow figure, colour per z layer, arrow length ∝ \|B\| | Same | Same |
-| `compare_runs.m` | (1) σ_B per point vs noise floor; (2) σ_pos 3D scatter on the grid (not a heat map); (3) σ_pos histogram (`:117-137`) | ≥ 2 magnet runs on one grid + no-magnet noise file (`README.md:109-115`) | `…magnet_*180000` + `…off2…` (+ the two hybrids), noise `…no_magnet.csv` |
+| `compare_runs.m` | (1) σ_B per point vs noise floor; (2) σ_pos 3D scatter on the grid (not a heat map); (3) σ_pos histogram (`:117-137`) | ≥ 2 magnet runs on one grid + no-magnet noise file (`FieldScan/README.md:109-115`) | `…magnet_*180000` + `…off2…` (+ the two hybrids), noise `…no_magnet.csv` |
 | `make_demo_scan.m` | None; writes synthetic CSVs | – | – |
 | `deltagui.py`, `joint_angle_plot.py`, `gyro data.py` | Live GUI plots (upstream) | Serial stream | Not report figures |
 
