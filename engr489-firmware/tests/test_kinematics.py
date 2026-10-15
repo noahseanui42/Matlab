@@ -119,3 +119,46 @@ def test_ik_fk_round_trip_symmetric_poses():
         d.calculateIPK(xyz)
         for theta in d.fi:
             assert abs(math.degrees(theta) - theta_deg) < 0.01, (theta_deg, xyz, math.degrees(theta))
+
+
+def test_fpk_no_crash_near_collinear_singularity():
+    """calculateFPK() must never raise ZeroDivisionError.
+
+    a1 = a11/a13 - a21/a23 (deltarobot.py calculateFPK, "Second
+    substitutions") is a distinct singularity from the a13==a23==0 case the
+    "singularities" branch already guards: it goes to exactly 0.0 whenever
+    the three elbow points project to a collinear line in the x-z plane,
+    e.g. fi1 == 0 with fi2 == -fi3 (cos is even, so a22 == 0 too here,
+    making even the y-elimination fallback unsolvable -- this is a genuine
+    double singularity, not just a numerically-clumsy path). Before the
+    fallback was added, calculateFPK() crashed with an uncaught
+    ZeroDivisionError on exactly this kind of angle triple when fed live
+    encoder readings in the GUI (readEncoders -> update3DPlot ->
+    readCoordinates -> calculateFPK). It must now either return a finite
+    point or raise the same TypeError already used elsewhere in this
+    function for "no physical solution", never crash.
+    """
+    d = make_robot()
+    for fi1, fi2, fi3 in [(0.0, -20.0, 20.0), (0.0, -0.5, 0.5), (0.0, 10.0, -10.0)]:
+        try:
+            point = d.calculateFPK((fi1, fi2, fi3))
+        except TypeError:
+            continue
+        assert all(math.isfinite(c) for c in point), (fi1, fi2, fi3, point)
+
+
+def test_fpk_accurate_near_a1_singularity():
+    """FK stays accurate right next to the a1 singularity, not just crash-free.
+
+    a1 can come out merely tiny (catastrophic cancellation) just off the
+    exact-zero surface, which -- without pivoting to the better-conditioned
+    elimination -- silently produces a wildly wrong point instead of
+    crashing. Round-tripping through IK catches that: a stale/garbage FK
+    result would not IK back to the original angles.
+    """
+    d = make_robot()
+    fi1, fi2, fi3 = 26.502162839758107, 10.0, 40.0  # a1 ~ 4e-16 here
+    xyz = d.calculateFPK((fi1, fi2, fi3))
+    d.calculateIPK(xyz)
+    for expected, theta in zip((fi1, fi2, fi3), d.fi):
+        assert abs(math.degrees(theta) - expected) < 0.01, (xyz, [math.degrees(t) for t in d.fi])

@@ -221,6 +221,38 @@ class DeltaGUI:
         self.ser.dtr = robot_config.SERIAL_DTR  # in order not to reset the arduino everytime when a serial is connected
         self.ser.open()
 
+    def handleSerialError(self, e):
+        """ Mark the device disconnected after a serial I/O failure (e.g. the
+        USB adapter was unplugged) instead of letting the exception crash the
+        Tkinter callback that triggered it. """
+        print(f"Serial connection lost: {e}")
+        self.serial_connected = False
+        try:
+            self.ser.close()
+        except (serial.SerialException, OSError):
+            pass
+        self.port_status_label.config(text="Disconnected (device error)")
+        self.serial_connect_button.config(text="Connect")
+
+    def serialWrite(self, data):
+        """ Write bytes to the serial port. Returns True on success, or False
+        (after disconnecting gracefully) if the device dropped out. """
+        try:
+            self.ser.write(data)
+            return True
+        except (serial.SerialException, OSError) as e:
+            self.handleSerialError(e)
+            return False
+
+    def serialReadAll(self):
+        """ Read available bytes from the serial port, decoded as utf-8.
+        Returns '' (after disconnecting gracefully) if the device dropped out. """
+        try:
+            return self.ser.readall().decode('utf-8')
+        except (serial.SerialException, OSError) as e:
+            self.handleSerialError(e)
+            return ''
+
     def saveRefreshTimes(self):
         """ Saves refresh times into a csv file """
         dataframe = pd.DataFrame(self.refresh_times)
@@ -236,6 +268,10 @@ class DeltaGUI:
                 data = json.loads(data)
                 info_angle = data["deg"][0]
                 # print(f"{data = }")
+            except (serial.SerialException, OSError) as e:
+                self.handleSerialError(e)
+                self.root.after(10, self.readEncoders)
+                return
             except UnicodeDecodeError as e:
                 pass
                 print(f"{e= }")
@@ -318,8 +354,8 @@ class DeltaGUI:
     def sendMessage(self, message):
         """ Sends a provided message to the self.ser serial port """
         if self.serial_connected:
-            self.ser.write(message.encode('utf-8'))
-            self.ser.write(END_MESSAGE.encode('utf-8'))
+            if self.serialWrite(message.encode('utf-8')):
+                self.serialWrite(END_MESSAGE.encode('utf-8'))
             return False
         else:
             tk.messagebox.showwarning(title="Not connected", message="Not connected to device.")
@@ -1416,7 +1452,7 @@ class DeltaGUI:
             tk.messagebox.showinfo(title="Complete", message="Upload completed")
 
         self.send_program = False
-        self.ser.write(END_MESSAGE.encode('utf-8'))  # send end of message byte
+        self.serialWrite(END_MESSAGE.encode('utf-8'))  # send end of message byte
 
     def uploadProgramPoints(self):
         """ Send program points to robot controller """
@@ -1467,13 +1503,14 @@ class DeltaGUI:
 
                 data_to_send = data_to_send.replace(" ", "")
                 print(f"{data_to_send = }")
-                self.ser.write(data_to_send.encode('utf-8'))
+                if not self.serialWrite(data_to_send.encode('utf-8')):
+                    return 0
 
                 receive_time = time.time() - time.time()
                 timeout = 0.2
-                incoming = self.ser.readall().decode('utf-8')
+                incoming = self.serialReadAll()
                 while incoming != 'OK' and receive_time < timeout:
-                    incoming = self.ser.readall().decode('utf-8')
+                    incoming = self.serialReadAll()
                     receive_time = time.time() - receive_time
                 print(incoming)
                 if incoming != 'OK' and temp_data_point['n']:
@@ -1507,13 +1544,14 @@ class DeltaGUI:
             # that is being sent is a certain function
             print(f"{data_to_send = }")
 
-            self.ser.write(data_to_send.encode('utf-8'))
+            if not self.serialWrite(data_to_send.encode('utf-8')):
+                return 0
 
-            incoming = self.ser.readall().decode('utf-8')
+            incoming = self.serialReadAll()
             receive_time = time.time() - time.time()
             timeout = 0.2
             while incoming != 'OK' and receive_time < timeout:
-                incoming = self.ser.readall().decode('utf-8')
+                incoming = self.serialReadAll()
                 receive_time = time.time() - receive_time
             if incoming != 'OK':
                 tk.messagebox.showinfo(title="Uploading unsuccessful", message="Program did not upload correctly!")
@@ -1615,12 +1653,12 @@ class DeltaGUI:
 
         data_to_send = data_to_send.replace(" ", "")
         print(f"{data_to_send = }")
-        self.ser.write(data_to_send.encode('utf-8'))
-        # while self.ser.in_waiting == 0:
-        #     pass  # .decode('utf-8')
-        # incoming = self.ser.readall().decode('utf-8')
-        # print(incoming)
-        self.ser.write(END_MESSAGE.encode('utf-8'))  # send end of message byte
+        if self.serialWrite(data_to_send.encode('utf-8')):
+            # while self.ser.in_waiting == 0:
+            #     pass  # .decode('utf-8')
+            # incoming = self.ser.readall().decode('utf-8')
+            # print(incoming)
+            self.serialWrite(END_MESSAGE.encode('utf-8'))  # send end of message byte
 
     def ipktoFpk(self, temp_data_point):
         temp_data_point['c'][0] += round(self.delta.TCP[0], 2)
@@ -1655,10 +1693,10 @@ class DeltaGUI:
 
             data_to_send = data_to_send.replace(" ", "")
             print(f"{data_to_send = }")
-            self.ser.write(data_to_send.encode('utf-8'))
+            if self.serialWrite(data_to_send.encode('utf-8')):
+                self.serialWrite(END_MESSAGE.encode('utf-8'))  # send end of message byte
             self.jog = 0
             self.send_jog = False
-            self.ser.write(END_MESSAGE.encode('utf-8'))  # send end of message byte
 
     def create3DPlot(self, master):
         """ Create 3D plot in the master window """
@@ -1986,8 +2024,8 @@ class DeltaGUI:
 
     def sendInterpolate(self):
         data_to_send = INTERPOLATE_BYTE
-        self.ser.write(data_to_send.encode('utf-8'))
-        self.ser.write(END_MESSAGE.encode('utf-8'))
+        if self.serialWrite(data_to_send.encode('utf-8')):
+            self.serialWrite(END_MESSAGE.encode('utf-8'))
         # temp_data_point = {"n": 0,
         #                    "i": 0,
         #                    "v": 9,
